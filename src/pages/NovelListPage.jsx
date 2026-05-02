@@ -5,9 +5,8 @@ import * as api from "../data/api";
 import { useAuth } from "../context/AuthContext";
 import Icon from "../components/Icon";
 import IconButton from "../components/IconButton";
-import { AvatarStack } from "../components/Avatar";
 import Confirm from "../components/Confirm";
-import { fmtTime, coverGradient, COLLABORATORS } from "../data/utils";
+import { fmtTime, coverGradient } from "../data/utils";
 
 export default function NovelListPage() {
   const { logout } = useAuth();
@@ -72,8 +71,6 @@ export default function NovelListPage() {
     }
   };
 
-  const presence = COLLABORATORS;
-
   return (
     <div
       className="page-in"
@@ -120,11 +117,6 @@ export default function NovelListPage() {
             소설 작업실
           </h1>
 
-          <AvatarStack users={presence} />
-          <div
-            className="divider"
-            style={{ width: 1, height: 20, background: "var(--border-1)" }}
-          />
           <IconButton icon="logout" label="로그아웃" onClick={logout} />
         </div>
       </header>

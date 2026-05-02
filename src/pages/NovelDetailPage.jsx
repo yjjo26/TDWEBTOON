@@ -11,8 +11,7 @@ import * as api from "../data/api";
 import { useAuth } from "../context/AuthContext";
 import Icon from "../components/Icon";
 import IconButton from "../components/IconButton";
-import { AvatarStack } from "../components/Avatar";
-import { coverGradient, COLLABORATORS } from "../data/utils";
+import { coverGradient } from "../data/utils";
 
 const TABS = [
   { to: "plot", label: "줄거리", icon: "fileText" },
@@ -97,21 +96,11 @@ export default function NovelDetailPage() {
 function DetailHeader({ novel, onBack, onLogout, onExport, refresh }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(novel.title);
-  const [theme, setTheme] = useState(
-    () => localStorage.getItem("td:theme") || "light"
-  );
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     setVal(novel.title);
   }, [novel.title]);
-
-  const toggleTheme = () => {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    localStorage.setItem("td:theme", next);
-    window.dispatchEvent(new Event("td:settings-changed"));
-  };
 
   const commitTitle = async () => {
     const t = val.trim() || novel.title;
@@ -205,26 +194,10 @@ function DetailHeader({ novel, onBack, onLogout, onExport, refresh }) {
           </h1>
         )}
 
-        <AvatarStack users={COLLABORATORS} />
-
-        <div
-          style={{
-            width: 1,
-            height: 20,
-            background: "var(--border-1)",
-            margin: "0 4px",
-          }}
-        />
-
         <IconButton
           icon="download"
           label="전체 .md ZIP 다운로드"
           onClick={onExport}
-        />
-        <IconButton
-          icon={theme === "dark" ? "sun" : "moon"}
-          label={theme === "dark" ? "라이트 모드" : "다크 모드"}
-          onClick={toggleTheme}
         />
         <div style={{ position: "relative" }}>
           <IconButton

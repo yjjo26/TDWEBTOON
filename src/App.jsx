@@ -11,11 +11,10 @@ import SettingsTab from "./pages/tabs/SettingsTab";
 import EpisodesTab from "./pages/tabs/EpisodesTab";
 import LogTab from "./pages/tabs/LogTab";
 
-// 테마/밀도/사이드바 위치 — localStorage 에서 복원
+// 테마는 다크 고정. 밀도/사이드바만 사용자 설정.
 function applyHtmlAttrs() {
-  const theme = localStorage.getItem("td:theme") || "light";
   const density = localStorage.getItem("td:density") || "standard";
-  document.documentElement.setAttribute("data-theme", theme);
+  document.documentElement.setAttribute("data-theme", "dark");
   document.documentElement.setAttribute("data-density", density);
 }
 
