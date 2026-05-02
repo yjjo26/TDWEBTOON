@@ -1,0 +1,15 @@
+name = "tdwebtoon-api"
+main = "src/index.js"
+compatibility_date = "2025-04-01"
+account_id = "a2b0f9f9f25925e0ef5c83e2c0be4c11"
+
+# D1: 모든 데이터(소설/파일/버전/로그)
+[[d1_databases]]
+binding = "DB"
+database_name = "tdwebtoon-db"
+database_id = "ee80e88e-da14-4cc8-9478-fe7f0c783fd8"
+migrations_dir = "migrations"
+
+# 개발용 — 프로덕션과 동일한 D1 사용 (별도 dev DB 만들기 전까지)
+[env.dev]
+name = "tdwebtoon-api-dev"

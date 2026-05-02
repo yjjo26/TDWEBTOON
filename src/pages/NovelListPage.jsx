@@ -1,20 +1,39 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useStoreState } from "../data/useStore";
-import { createNovel, deleteNovel } from "../data/store";
+import { useNovels } from "../data/hooks";
+import * as api from "../data/api";
 import { useAuth } from "../context/AuthContext";
 
 export default function NovelListPage() {
   const { logout } = useAuth();
-  const state = useStoreState();
+  const { novels, error, refresh } = useNovels();
   const [newTitle, setNewTitle] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const onCreate = (e) => {
+  const onCreate = async (e) => {
     e.preventDefault();
     const title = newTitle.trim();
     if (!title) return;
-    createNovel(title);
-    setNewTitle("");
+    setBusy(true);
+    try {
+      await api.createNovel(title);
+      setNewTitle("");
+      await refresh();
+    } catch (err) {
+      alert(`생성 실패: ${err.message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onDelete = async (slug, title) => {
+    if (!confirm(`'${title}' 을(를) 삭제할까요?`)) return;
+    try {
+      await api.deleteNovel(slug);
+      await refresh();
+    } catch (err) {
+      alert(`삭제 실패: ${err.message}`);
+    }
   };
 
   return (
@@ -46,47 +65,47 @@ export default function NovelListPage() {
             />
             <button
               type="submit"
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg px-4 py-2 transition"
+              disabled={busy}
+              className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-medium rounded-lg px-4 py-2 transition"
             >
-              추가
+              {busy ? "추가 중..." : "추가"}
             </button>
           </form>
         </section>
 
         <section>
           <h2 className="text-sm font-semibold text-slate-500 mb-3">
-            내 소설 ({state.novels.length})
+            내 소설{novels ? ` (${novels.length})` : ""}
           </h2>
-          {state.novels.length === 0 ? (
+
+          {error && (
+            <p className="text-sm text-red-500 mb-3">서버 오류: {error}</p>
+          )}
+
+          {novels === null ? (
+            <p className="text-slate-400 text-sm">불러오는 중...</p>
+          ) : novels.length === 0 ? (
             <p className="text-slate-400 text-sm">아직 등록된 소설이 없습니다.</p>
           ) : (
             <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {state.novels.map((novel) => (
+              {novels.map((novel) => (
                 <li
-                  key={novel.id}
+                  key={novel.slug}
                   className="bg-white border border-slate-200 rounded-xl p-4 hover:shadow-md transition flex flex-col"
                 >
                   <Link
-                    to={`/novels/${novel.id}`}
+                    to={`/novels/${encodeURIComponent(novel.slug)}`}
                     className="block flex-1 mb-3"
                   >
                     <h3 className="font-semibold text-slate-800 mb-1">
                       {novel.title}
                     </h3>
-                    <p className="text-xs text-slate-500 line-clamp-2">
-                      {novel.synopsis || "줄거리가 비어 있습니다."}
+                    <p className="text-xs text-slate-500">
+                      slug: {novel.slug} · 다음 회차: {novel.next_episode}화
                     </p>
-                    <div className="mt-2 text-xs text-slate-400">
-                      회차 {novel.episodes.length} · 캐릭터{" "}
-                      {novel.characters.length} · 배경 {novel.backgrounds.length}
-                    </div>
                   </Link>
                   <button
-                    onClick={() => {
-                      if (confirm(`'${novel.title}' 을(를) 삭제할까요?`)) {
-                        deleteNovel(novel.id);
-                      }
-                    }}
+                    onClick={() => onDelete(novel.slug, novel.title)}
                     className="self-start text-xs text-red-500 hover:text-red-700"
                   >
                     삭제

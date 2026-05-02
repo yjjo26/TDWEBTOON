@@ -1,21 +1,48 @@
 import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
-import {
-  addCharacter,
-  deleteCharacter,
-  updateCharacter,
-} from "../../data/store";
+import * as api from "../../data/api";
+import EditableFile from "../../components/EditableFile";
 
 export default function CharactersTab() {
-  const { novel } = useOutletContext();
+  const { novel, slug, refresh } = useOutletContext();
   const [newName, setNewName] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const onAdd = (e) => {
+  const characters = novel.files
+    .filter((f) => f.kind === "character")
+    .sort((a, b) => a.title.localeCompare(b.title));
+
+  const onAdd = async (e) => {
     e.preventDefault();
     const name = newName.trim();
     if (!name) return;
-    addCharacter(novel.id, { name });
-    setNewName("");
+    setBusy(true);
+    try {
+      // key 는 한글 그대로 (filesystem 친화적이지만 unique 만 되면 됨)
+      const key = name.replace(/[\\/]/g, "_").slice(0, 60);
+      await api.createFile(slug, {
+        kind: "character",
+        key,
+        title: name,
+        content: "",
+      });
+      setNewName("");
+      await refresh();
+    } catch (err) {
+      alert(`추가 실패: ${err.message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveFile = async (id, patch) => {
+    await api.updateFile(slug, id, patch);
+    await refresh();
+  };
+
+  const deleteFile = async (id) => {
+    await api.deleteFile(slug, id);
+    await refresh();
   };
 
   return (
@@ -33,53 +60,26 @@ export default function CharactersTab() {
         />
         <button
           type="submit"
-          className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg px-4 py-2 transition"
+          disabled={busy}
+          className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-medium rounded-lg px-4 py-2 transition"
         >
-          추가
+          {busy ? "..." : "추가"}
         </button>
       </form>
 
-      {novel.characters.length === 0 ? (
+      {characters.length === 0 ? (
         <p className="text-slate-400 text-sm px-1">
-          등록된 캐릭터가 없습니다.
+          등록된 캐릭터가 없습니다. (저장 시 <code>characters/&lt;이름&gt;.md</code> 형식으로 보관됨)
         </p>
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2">
-          {novel.characters.map((c) => (
-            <li
-              key={c.id}
-              className="bg-white border border-slate-200 rounded-xl p-4 space-y-2"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <input
-                  type="text"
-                  value={c.name}
-                  onChange={(e) =>
-                    updateCharacter(novel.id, c.id, { name: e.target.value })
-                  }
-                  className="flex-1 font-semibold text-slate-800 bg-transparent border-0 focus:outline-none focus:bg-slate-100 rounded px-1"
-                />
-                <button
-                  onClick={() => {
-                    if (confirm(`'${c.name}' 캐릭터를 삭제할까요?`)) {
-                      deleteCharacter(novel.id, c.id);
-                    }
-                  }}
-                  className="text-xs text-red-500 hover:text-red-700 shrink-0"
-                >
-                  삭제
-                </button>
-              </div>
-              <textarea
-                value={c.description}
-                onChange={(e) =>
-                  updateCharacter(novel.id, c.id, {
-                    description: e.target.value,
-                  })
-                }
-                placeholder="캐릭터 설명"
-                rows={3}
-                className="w-full border border-slate-200 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-y"
+          {characters.map((f) => (
+            <li key={f.id}>
+              <EditableFile
+                file={f}
+                onSave={(patch) => saveFile(f.id, patch)}
+                onDelete={() => deleteFile(f.id)}
+                contentRows={4}
               />
             </li>
           ))}

@@ -25,7 +25,7 @@ export default function App() {
           }
         />
         <Route
-          path="/novels/:novelId"
+          path="/novels/:slug"
           element={
             <ProtectedRoute>
               <NovelDetailPage />
