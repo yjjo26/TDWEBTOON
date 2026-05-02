@@ -95,6 +95,11 @@ export const deleteScene = (slug, sceneId) =>
   call(`/api/novels/${encodeURIComponent(slug)}/scenes/${sceneId}`, {
     method: "DELETE",
   });
+export const reorderScenes = (slug, episodeId, fromId, toId) =>
+  call(
+    `/api/novels/${encodeURIComponent(slug)}/episodes/${episodeId}/scenes/reorder`,
+    { method: "POST", body: JSON.stringify({ fromId, toId }) }
+  );
 
 // Logs
 export const listLogs = (slug, limit = 500) =>

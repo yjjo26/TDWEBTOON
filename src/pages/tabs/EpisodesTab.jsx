@@ -512,6 +512,8 @@ function EpisodeStats({ body, dirty }) {
 function SceneList({ slug, episodeId, scenes, characters, refresh }) {
   const [expanded, setExpanded] = useState(true);
   const [adding, setAdding] = useState(false);
+  const [dragId, setDragId] = useState(null);
+  const [dropId, setDropId] = useState(null);
 
   const onAdd = async (s) => {
     try {
@@ -547,6 +549,37 @@ function SceneList({ slug, episodeId, scenes, characters, refresh }) {
     } catch (e) {
       alert(`씬 삭제 실패: ${e.message}`);
     }
+  };
+
+  const onDragStart = (e, id) => {
+    setDragId(id);
+    try {
+      e.dataTransfer.effectAllowed = "move";
+    } catch {
+      /* ignore */
+    }
+  };
+  const onDragOver = (e, id) => {
+    if (!dragId || dragId === id) return;
+    e.preventDefault();
+    setDropId(id);
+  };
+  const onDrop = async (e, id) => {
+    e.preventDefault();
+    if (dragId && dragId !== id) {
+      try {
+        await api.reorderScenes(slug, episodeId, dragId, id);
+        await refresh();
+      } catch (err) {
+        alert(`씬 정렬 실패: ${err.message}`);
+      }
+    }
+    setDragId(null);
+    setDropId(null);
+  };
+  const onDragEnd = () => {
+    setDragId(null);
+    setDropId(null);
   };
 
   return (
@@ -602,14 +635,26 @@ function SceneList({ slug, episodeId, scenes, characters, refresh }) {
             />
           )}
           {scenes.map((s, i) => (
-            <SceneCard
+            <div
               key={s.id}
-              scene={s}
-              index={i + 1}
-              characters={characters}
-              onSave={onSave}
-              onDelete={onDelete}
-            />
+              draggable
+              onDragStart={(e) => onDragStart(e, s.id)}
+              onDragOver={(e) => onDragOver(e, s.id)}
+              onDrop={(e) => onDrop(e, s.id)}
+              onDragEnd={onDragEnd}
+              className={`draggable ${dragId === s.id ? "dragging" : ""} ${
+                dropId === s.id ? "drop-target" : ""
+              }`}
+              style={{ borderRadius: "var(--r-lg)" }}
+            >
+              <SceneCard
+                scene={s}
+                index={i + 1}
+                characters={characters}
+                onSave={onSave}
+                onDelete={onDelete}
+              />
+            </div>
           ))}
           {scenes.length === 0 && !adding && (
             <div
@@ -702,16 +747,26 @@ function SceneCard({ scene, index, characters, autoEdit, onSave, onDelete, onCan
         }}
       >
         {index && (
-          <span
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              color: "var(--accent)",
-              fontFamily: "var(--font-mono)",
-            }}
-          >
-            SCENE {String(index).padStart(2, "0")}
-          </span>
+          <>
+            <span
+              className="drag-handle"
+              title="드래그해서 순서 변경"
+              data-tooltip="드래그해서 순서 변경"
+              style={{ cursor: "grab", color: "var(--ink-4)" }}
+            >
+              <Icon name="drag" size={12} />
+            </span>
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: "var(--accent)",
+                fontFamily: "var(--font-mono)",
+              }}
+            >
+              SCENE {String(index).padStart(2, "0")}
+            </span>
+          </>
         )}
       </div>
 

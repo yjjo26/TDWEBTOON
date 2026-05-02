@@ -16,7 +16,7 @@ import { coverGradient } from "../data/utils";
 const TABS = [
   { to: "plot", label: "줄거리", icon: "fileText" },
   { to: "characters", label: "캐릭터", icon: "users", countOf: (n) => n.files.filter((f) => f.kind === "character").length },
-  { to: "settings", label: "배경", icon: "map" },
+  { to: "settings", label: "배경", icon: "map", countOf: (n) => n.files.filter((f) => f.kind === "world").length },
   { to: "episodes", label: "회차", icon: "book", countOf: (n) => n.files.filter((f) => f.kind === "episode").length },
   { to: "log", label: "로그", icon: "history" },
 ];

@@ -201,7 +201,7 @@ async function createFile(env, slug, { kind, key, title, content }) {
   const safeContent = content || "";
   const safeTitle = title || key;
 
-  // synopsis 와 world(settings) 는 소설당 1개 제한
+  // synopsis 는 소설당 1개 제한 (world/character/episode 는 다중)
   if (kind === "synopsis") {
     const exists = await env.DB.prepare(
       "SELECT id FROM files WHERE novel_slug = ? AND kind = 'synopsis'"
@@ -209,14 +209,6 @@ async function createFile(env, slug, { kind, key, title, content }) {
       .bind(slug)
       .first();
     if (exists) throw new Error("synopsis already exists");
-  }
-  if (kind === "world" && key === "settings") {
-    const exists = await env.DB.prepare(
-      "SELECT id FROM files WHERE novel_slug = ? AND kind = 'world' AND key = 'settings'"
-    )
-      .bind(slug)
-      .first();
-    if (exists) throw new Error("settings already exists");
   }
 
   // 같은 kind 내 다음 position
@@ -378,6 +370,36 @@ async function reorderEpisode(env, slug, fromId, toId) {
       ts,
       slug
     )
+  );
+  await env.DB.batch(stmts);
+}
+
+// 씬 순서 변경 (드래그)
+async function reorderScene(env, slug, episodeId, fromId, toId) {
+  if (!fromId || !toId || fromId === toId) return;
+  const { results } = await env.DB.prepare(
+    "SELECT id FROM scenes WHERE novel_slug = ? AND episode_id = ? ORDER BY position, id"
+  )
+    .bind(slug, episodeId)
+    .all();
+  const ids = results.map((r) => r.id);
+  const fromIdx = ids.indexOf(fromId);
+  const toIdx = ids.indexOf(toId);
+  if (fromIdx === -1 || toIdx === -1) return;
+  const [moved] = ids.splice(fromIdx, 1);
+  ids.splice(toIdx, 0, moved);
+  const ts = nowMs();
+  const stmts = ids.map((id, i) =>
+    env.DB.prepare("UPDATE scenes SET position = ?, updated_at = ? WHERE id = ?")
+      .bind(i + 1, ts, id)
+  );
+  stmts.push(
+    env.DB.prepare(
+      "INSERT INTO logs (novel_slug, timestamp, action, target_kind, target_id, description, user_label) VALUES (?, ?, 'update', 'episode', ?, '씬 순서 변경', 'me')"
+    ).bind(slug, ts, episodeId)
+  );
+  stmts.push(
+    env.DB.prepare("UPDATE novels SET updated_at = ? WHERE slug = ?").bind(ts, slug)
   );
   await env.DB.batch(stmts);
 }
@@ -653,6 +675,15 @@ export default {
       }
 
       // ── Scenes ──
+      if ((m = matchPath(pathname, "/api/novels/:slug/episodes/:episodeId/scenes/reorder"))) {
+        if (method === "POST") {
+          const body = await request.json().catch(() => ({}));
+          await reorderScene(env, m.slug, m.episodeId, body.fromId, body.toId);
+          return json({ ok: true });
+        }
+        return bad(405, "Method not allowed");
+      }
+
       if ((m = matchPath(pathname, "/api/novels/:slug/episodes/:episodeId/scenes"))) {
         if (method === "POST") {
           const body = await request.json().catch(() => ({}));
