@@ -1,10 +1,15 @@
 // tdwebtoon-api — Cloudflare Worker
-// 모든 데이터 변경은 자동으로 file_versions(스냅샷) + logs(이력) 두 곳에 기록.
+// 모든 데이터 변경은 자동으로 file_versions(스냅샷) + logs(이력)에 기록.
 // kind: 'synopsis' | 'character' | 'world' | 'episode'
+//   - synopsis: 소설당 1개 (key='main') — storytelling_style.md
+//   - world   : 소설당 1개 (key='settings') — settings.md (디자인 spec)
+//   - character: characters/<이름>.md
+//   - episode : episodes/<n>화.md
+// scenes 는 별도 테이블 — 회차에 종속되는 메타데이터.
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
   "Access-Control-Max-Age": "86400",
 };
@@ -40,30 +45,38 @@ const toSlug = (s) =>
 
 const newId = () => crypto.randomUUID();
 
+const COVER_OPTIONS = ["indigo", "rose", "teal", "amber", "slate"];
+
 // ---------- Novels ----------
 async function listNovels(env) {
   const { results } = await env.DB.prepare(
-    "SELECT slug, title, next_episode, created_at, updated_at FROM novels ORDER BY updated_at DESC"
+    "SELECT slug, title, summary, cover, next_episode, created_at, updated_at FROM novels ORDER BY updated_at DESC"
   ).all();
   return results;
 }
 
 async function getNovel(env, slug) {
   const novel = await env.DB.prepare(
-    "SELECT slug, title, next_episode, created_at, updated_at FROM novels WHERE slug = ?"
+    "SELECT slug, title, summary, cover, next_episode, created_at, updated_at FROM novels WHERE slug = ?"
   )
     .bind(slug)
     .first();
   if (!novel) return null;
   const { results: files } = await env.DB.prepare(
-    "SELECT id, kind, key, title, content, current_version, created_at, updated_at FROM files WHERE novel_slug = ? ORDER BY kind, key"
+    "SELECT id, kind, key, title, content, current_version, position, created_at, updated_at FROM files WHERE novel_slug = ? ORDER BY kind, position, key"
   )
     .bind(slug)
     .all();
-  return { ...novel, files };
+  // Scenes
+  const { results: scenes } = await env.DB.prepare(
+    "SELECT id, episode_id, position, situation, setting, characters, created_at, updated_at FROM scenes WHERE novel_slug = ? ORDER BY episode_id, position"
+  )
+    .bind(slug)
+    .all();
+  return { ...novel, files, scenes };
 }
 
-async function createNovel(env, { title }) {
+async function createNovel(env, { title, summary = "", cover = "" }) {
   if (!title || typeof title !== "string") throw new Error("title required");
   const ts = nowMs();
   let slug = toSlug(title);
@@ -80,33 +93,76 @@ async function createNovel(env, { title }) {
     slug = `${slug}-${i}`;
   }
 
+  // 자동 cover 회전
+  const total = await env.DB.prepare("SELECT COUNT(*) AS n FROM novels").first();
+  const autoCover = COVER_OPTIONS[(total?.n || 0) % COVER_OPTIONS.length];
+  const finalCover = cover || autoCover;
+
   await env.DB.batch([
     env.DB.prepare(
-      "INSERT INTO novels (slug, title, next_episode, created_at, updated_at) VALUES (?, ?, 1, ?, ?)"
-    ).bind(slug, title, ts, ts),
+      "INSERT INTO novels (slug, title, summary, cover, next_episode, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)"
+    ).bind(slug, title, summary, finalCover, ts, ts),
     env.DB.prepare(
-      "INSERT INTO logs (novel_slug, timestamp, action, target_kind, description) VALUES (?, ?, 'create', 'novel', ?)"
+      "INSERT INTO logs (novel_slug, timestamp, action, target_kind, description, user_label) VALUES (?, ?, 'create', 'novel', ?, 'me')"
     ).bind(slug, ts, `소설 '${title}' 생성`),
   ]);
 
-  return { slug, title, next_episode: 1, created_at: ts, updated_at: ts };
+  return {
+    slug,
+    title,
+    summary,
+    cover: finalCover,
+    next_episode: 1,
+    created_at: ts,
+    updated_at: ts,
+  };
 }
 
-async function updateNovelTitle(env, slug, newTitle) {
-  if (!newTitle) throw new Error("title required");
-  const before = await env.DB.prepare("SELECT title FROM novels WHERE slug = ?")
+async function updateNovel(env, slug, patch) {
+  const before = await env.DB.prepare(
+    "SELECT title, summary, cover FROM novels WHERE slug = ?"
+  )
     .bind(slug)
     .first();
   if (!before) throw new Error("novel not found");
-  if (before.title === newTitle) return;
+
+  const newTitle = patch.title !== undefined ? patch.title : before.title;
+  const newSummary = patch.summary !== undefined ? patch.summary : before.summary;
+  const newCover = patch.cover !== undefined ? patch.cover : before.cover;
+
+  const titleChanged = newTitle !== before.title;
+  const summaryChanged = newSummary !== before.summary;
+  const coverChanged = newCover !== before.cover;
+  if (!titleChanged && !summaryChanged && !coverChanged) return;
+
   const ts = nowMs();
-  await env.DB.batch([
-    env.DB.prepare("UPDATE novels SET title = ?, updated_at = ? WHERE slug = ?")
-      .bind(newTitle, ts, slug),
+  const stmts = [
     env.DB.prepare(
-      "INSERT INTO logs (novel_slug, timestamp, action, target_kind, description) VALUES (?, ?, 'update', 'title', ?)"
-    ).bind(slug, ts, `제목 변경: '${before.title}' → '${newTitle}'`),
-  ]);
+      "UPDATE novels SET title = ?, summary = ?, cover = ?, updated_at = ? WHERE slug = ?"
+    ).bind(newTitle, newSummary, newCover, ts, slug),
+  ];
+  if (titleChanged) {
+    stmts.push(
+      env.DB.prepare(
+        "INSERT INTO logs (novel_slug, timestamp, action, target_kind, description, user_label) VALUES (?, ?, 'update', 'title', ?, 'me')"
+      ).bind(slug, ts, `제목 변경: '${before.title}' → '${newTitle}'`)
+    );
+  }
+  if (summaryChanged) {
+    stmts.push(
+      env.DB.prepare(
+        "INSERT INTO logs (novel_slug, timestamp, action, target_kind, description, user_label) VALUES (?, ?, 'update', 'novel', ?, 'me')"
+      ).bind(slug, ts, `요약 수정`)
+    );
+  }
+  if (coverChanged) {
+    stmts.push(
+      env.DB.prepare(
+        "INSERT INTO logs (novel_slug, timestamp, action, target_kind, description, user_label) VALUES (?, ?, 'update', 'novel', ?, 'me')"
+      ).bind(slug, ts, `커버 색 변경: '${before.cover}' → '${newCover}'`)
+    );
+  }
+  await env.DB.batch(stmts);
 }
 
 async function deleteNovel(env, slug) {
@@ -114,15 +170,14 @@ async function deleteNovel(env, slug) {
     .bind(slug)
     .first();
   if (!novel) return;
-  // CASCADE 가 files/file_versions/logs 다 지움
   await env.DB.prepare("DELETE FROM novels WHERE slug = ?").bind(slug).run();
 }
 
 // ---------- Files ----------
 async function listFiles(env, slug, kind) {
   const sql = kind
-    ? "SELECT id, kind, key, title, current_version, created_at, updated_at FROM files WHERE novel_slug = ? AND kind = ? ORDER BY key"
-    : "SELECT id, kind, key, title, current_version, created_at, updated_at FROM files WHERE novel_slug = ? ORDER BY kind, key";
+    ? "SELECT id, kind, key, title, current_version, position, created_at, updated_at FROM files WHERE novel_slug = ? AND kind = ? ORDER BY position, key"
+    : "SELECT id, kind, key, title, current_version, position, created_at, updated_at FROM files WHERE novel_slug = ? ORDER BY kind, position, key";
   const stmt = kind
     ? env.DB.prepare(sql).bind(slug, kind)
     : env.DB.prepare(sql).bind(slug);
@@ -132,7 +187,7 @@ async function listFiles(env, slug, kind) {
 
 async function getFile(env, slug, id) {
   return env.DB.prepare(
-    "SELECT id, novel_slug, kind, key, title, content, current_version, created_at, updated_at FROM files WHERE novel_slug = ? AND id = ?"
+    "SELECT id, novel_slug, kind, key, title, content, current_version, position, created_at, updated_at FROM files WHERE novel_slug = ? AND id = ?"
   )
     .bind(slug, id)
     .first();
@@ -146,26 +201,42 @@ async function createFile(env, slug, { kind, key, title, content }) {
   const safeContent = content || "";
   const safeTitle = title || key;
 
-  // synopsis 는 소설당 1개로 제한 (key='main')
+  // synopsis 와 world(settings) 는 소설당 1개 제한
   if (kind === "synopsis") {
     const exists = await env.DB.prepare(
       "SELECT id FROM files WHERE novel_slug = ? AND kind = 'synopsis'"
     )
       .bind(slug)
       .first();
-    if (exists) throw new Error("synopsis already exists for this novel");
+    if (exists) throw new Error("synopsis already exists");
   }
+  if (kind === "world" && key === "settings") {
+    const exists = await env.DB.prepare(
+      "SELECT id FROM files WHERE novel_slug = ? AND kind = 'world' AND key = 'settings'"
+    )
+      .bind(slug)
+      .first();
+    if (exists) throw new Error("settings already exists");
+  }
+
+  // 같은 kind 내 다음 position
+  const maxPos = await env.DB.prepare(
+    "SELECT COALESCE(MAX(position), 0) AS m FROM files WHERE novel_slug = ? AND kind = ?"
+  )
+    .bind(slug, kind)
+    .first();
+  const nextPos = (maxPos?.m || 0) + 1;
 
   try {
     await env.DB.batch([
       env.DB.prepare(
-        "INSERT INTO files (id, novel_slug, kind, key, title, content, current_version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)"
-      ).bind(id, slug, kind, key, safeTitle, safeContent, ts, ts),
+        "INSERT INTO files (id, novel_slug, kind, key, title, content, current_version, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)"
+      ).bind(id, slug, kind, key, safeTitle, safeContent, nextPos, ts, ts),
       env.DB.prepare(
         "INSERT INTO file_versions (file_id, version, content, created_at) VALUES (?, 1, ?, ?)"
       ).bind(id, safeContent, ts),
       env.DB.prepare(
-        "INSERT INTO logs (novel_slug, timestamp, action, target_kind, target_id, description, after_version) VALUES (?, ?, 'create', ?, ?, ?, 1)"
+        "INSERT INTO logs (novel_slug, timestamp, action, target_kind, target_id, description, after_version, user_label) VALUES (?, ?, 'create', ?, ?, ?, 1, 'me')"
       ).bind(slug, ts, kind, id, `${KIND_LABEL[kind]} 추가: '${safeTitle}'`),
       env.DB.prepare("UPDATE novels SET updated_at = ? WHERE slug = ?").bind(
         ts,
@@ -187,6 +258,7 @@ async function createFile(env, slug, { kind, key, title, content }) {
     title: safeTitle,
     content: safeContent,
     current_version: 1,
+    position: nextPos,
     created_at: ts,
     updated_at: ts,
   };
@@ -207,7 +279,9 @@ async function updateFile(env, slug, id, patch) {
   if (!titleChanged && !contentChanged && !keyChanged) return before;
 
   const ts = nowMs();
-  const newVersion = contentChanged ? before.current_version + 1 : before.current_version;
+  const newVersion = contentChanged
+    ? before.current_version + 1
+    : before.current_version;
 
   const changedFields = [];
   if (titleChanged) changedFields.push("title");
@@ -219,7 +293,7 @@ async function updateFile(env, slug, id, patch) {
       "UPDATE files SET title = ?, key = ?, content = ?, current_version = ?, updated_at = ? WHERE id = ?"
     ).bind(newTitle, newKey, newContent, newVersion, ts, id),
     env.DB.prepare(
-      "INSERT INTO logs (novel_slug, timestamp, action, target_kind, target_id, description, before_version, after_version) VALUES (?, ?, 'update', ?, ?, ?, ?, ?)"
+      "INSERT INTO logs (novel_slug, timestamp, action, target_kind, target_id, description, before_version, after_version, user_label) VALUES (?, ?, 'update', ?, ?, ?, ?, ?, 'me')"
     ).bind(
       slug,
       ts,
@@ -260,7 +334,7 @@ async function deleteFile(env, slug, id) {
   await env.DB.batch([
     env.DB.prepare("DELETE FROM files WHERE id = ?").bind(id),
     env.DB.prepare(
-      "INSERT INTO logs (novel_slug, timestamp, action, target_kind, target_id, description, before_version) VALUES (?, ?, 'delete', ?, ?, ?, ?)"
+      "INSERT INTO logs (novel_slug, timestamp, action, target_kind, target_id, description, before_version, user_label) VALUES (?, ?, 'delete', ?, ?, ?, ?, 'me')"
     ).bind(
       slug,
       ts,
@@ -274,6 +348,38 @@ async function deleteFile(env, slug, id) {
       slug
     ),
   ]);
+}
+
+// 회차 순서 변경 (드래그)
+async function reorderEpisode(env, slug, fromId, toId) {
+  if (!fromId || !toId || fromId === toId) return;
+  const { results } = await env.DB.prepare(
+    "SELECT id FROM files WHERE novel_slug = ? AND kind = 'episode' ORDER BY position, key"
+  )
+    .bind(slug)
+    .all();
+  const ids = results.map((r) => r.id);
+  const fromIdx = ids.indexOf(fromId);
+  const toIdx = ids.indexOf(toId);
+  if (fromIdx === -1 || toIdx === -1) return;
+  const [moved] = ids.splice(fromIdx, 1);
+  ids.splice(toIdx, 0, moved);
+  const ts = nowMs();
+  const stmts = ids.map((id, i) =>
+    env.DB.prepare("UPDATE files SET position = ? WHERE id = ?").bind(i + 1, id)
+  );
+  stmts.push(
+    env.DB.prepare(
+      "INSERT INTO logs (novel_slug, timestamp, action, target_kind, description, user_label) VALUES (?, ?, 'update', 'episode', '회차 순서 변경', 'me')"
+    ).bind(slug, ts)
+  );
+  stmts.push(
+    env.DB.prepare("UPDATE novels SET updated_at = ? WHERE slug = ?").bind(
+      ts,
+      slug
+    )
+  );
+  await env.DB.batch(stmts);
 }
 
 // ---------- Versions / Rollback ----------
@@ -306,13 +412,13 @@ async function rollbackFile(env, slug, id, targetVersion) {
       "INSERT INTO file_versions (file_id, version, content, created_at) VALUES (?, ?, ?, ?)"
     ).bind(id, newVersion, target.content, ts),
     env.DB.prepare(
-      "INSERT INTO logs (novel_slug, timestamp, action, target_kind, target_id, description, before_version, after_version) VALUES (?, ?, 'rollback', ?, ?, ?, ?, ?)"
+      "INSERT INTO logs (novel_slug, timestamp, action, target_kind, target_id, description, before_version, after_version, user_label) VALUES (?, ?, 'rollback', ?, ?, ?, ?, ?, 'me')"
     ).bind(
       slug,
       ts,
       file.kind,
       id,
-      `${KIND_LABEL[file.kind]} 롤백: '${file.title}' v${file.current_version} → v${targetVersion} 내용으로 복원`,
+      `${KIND_LABEL[file.kind]} 롤백: '${file.title}' v${file.current_version} → v${targetVersion}`,
       file.current_version,
       newVersion
     ),
@@ -322,11 +428,101 @@ async function rollbackFile(env, slug, id, targetVersion) {
     ),
   ]);
 
-  return { ...file, content: target.content, current_version: newVersion, updated_at: ts };
+  return {
+    ...file,
+    content: target.content,
+    current_version: newVersion,
+    updated_at: ts,
+  };
+}
+
+// ---------- Scenes ----------
+async function createScene(env, slug, episodeId, { situation = "", setting = "", characters = [] } = {}) {
+  const ep = await getFile(env, slug, episodeId);
+  if (!ep || ep.kind !== "episode") throw new Error("episode not found");
+  const id = newId();
+  const ts = nowMs();
+  const maxPos = await env.DB.prepare(
+    "SELECT COALESCE(MAX(position), 0) AS m FROM scenes WHERE episode_id = ?"
+  )
+    .bind(episodeId)
+    .first();
+  const pos = (maxPos?.m || 0) + 1;
+  const charsJson = JSON.stringify(Array.isArray(characters) ? characters : []);
+
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO scenes (id, episode_id, novel_slug, position, situation, setting, characters, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(id, episodeId, slug, pos, situation, setting, charsJson, ts, ts),
+    env.DB.prepare(
+      "INSERT INTO logs (novel_slug, timestamp, action, target_kind, target_id, description, user_label) VALUES (?, ?, 'create', 'episode', ?, ?, 'me')"
+    ).bind(slug, ts, episodeId, `씬 추가 [${ep.title}]: ${situation.slice(0, 30)}`),
+    env.DB.prepare("UPDATE novels SET updated_at = ? WHERE slug = ?").bind(ts, slug),
+  ]);
+
+  return {
+    id,
+    episode_id: episodeId,
+    novel_slug: slug,
+    position: pos,
+    situation,
+    setting,
+    characters: charsJson,
+    created_at: ts,
+    updated_at: ts,
+  };
+}
+
+async function updateScene(env, slug, sceneId, patch) {
+  const before = await env.DB.prepare("SELECT * FROM scenes WHERE id = ? AND novel_slug = ?")
+    .bind(sceneId, slug)
+    .first();
+  if (!before) throw new Error("scene not found");
+  const ep = await env.DB.prepare("SELECT title FROM files WHERE id = ?").bind(before.episode_id).first();
+
+  const newSit = patch.situation !== undefined ? patch.situation : before.situation;
+  const newSet = patch.setting !== undefined ? patch.setting : before.setting;
+  const newChars =
+    patch.characters !== undefined
+      ? JSON.stringify(Array.isArray(patch.characters) ? patch.characters : [])
+      : before.characters;
+
+  if (newSit === before.situation && newSet === before.setting && newChars === before.characters) {
+    return before;
+  }
+
+  const ts = nowMs();
+  await env.DB.batch([
+    env.DB.prepare(
+      "UPDATE scenes SET situation = ?, setting = ?, characters = ?, updated_at = ? WHERE id = ?"
+    ).bind(newSit, newSet, newChars, ts, sceneId),
+    env.DB.prepare(
+      "INSERT INTO logs (novel_slug, timestamp, action, target_kind, target_id, description, user_label) VALUES (?, ?, 'update', 'episode', ?, ?, 'me')"
+    ).bind(slug, ts, before.episode_id, `씬 수정 [${ep?.title || "?"}]: ${newSit.slice(0, 30)}`),
+    env.DB.prepare("UPDATE novels SET updated_at = ? WHERE slug = ?").bind(ts, slug),
+  ]);
+
+  return { ...before, situation: newSit, setting: newSet, characters: newChars, updated_at: ts };
+}
+
+async function deleteScene(env, slug, sceneId) {
+  const before = await env.DB.prepare("SELECT * FROM scenes WHERE id = ? AND novel_slug = ?")
+    .bind(sceneId, slug)
+    .first();
+  if (!before) return;
+  const ep = await env.DB.prepare("SELECT title FROM files WHERE id = ?").bind(before.episode_id).first();
+  const ts = nowMs();
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM scenes WHERE id = ?").bind(sceneId),
+    env.DB.prepare(
+      "INSERT INTO logs (novel_slug, timestamp, action, target_kind, target_id, description, user_label) VALUES (?, ?, 'delete', 'episode', ?, ?, 'me')"
+    ).bind(slug, ts, before.episode_id, `씬 삭제 [${ep?.title || "?"}]`),
+    env.DB.prepare("UPDATE novels SET updated_at = ? WHERE slug = ?").bind(ts, slug),
+  ]);
 }
 
 // ---------- Logs ----------
-async function listLogs(env, slug, limit = 200) {
+async function listLogs(env, slug, limit = 500) {
   const { results } = await env.DB.prepare(
     "SELECT id, timestamp, action, target_kind, target_id, description, user_label, before_version, after_version FROM logs WHERE novel_slug = ? ORDER BY timestamp DESC LIMIT ?"
   )
@@ -337,13 +533,13 @@ async function listLogs(env, slug, limit = 200) {
 
 // ---------- Router ----------
 function matchPath(pathname, pattern) {
-  // pattern e.g. "/api/novels/:slug/files/:id"
   const pParts = pattern.split("/").filter(Boolean);
   const xParts = pathname.split("/").filter(Boolean);
   if (pParts.length !== xParts.length) return null;
   const params = {};
   for (let i = 0; i < pParts.length; i++) {
-    if (pParts[i].startsWith(":")) params[pParts[i].slice(1)] = decodeURIComponent(xParts[i]);
+    if (pParts[i].startsWith(":"))
+      params[pParts[i].slice(1)] = decodeURIComponent(xParts[i]);
     else if (pParts[i] !== xParts[i]) return null;
   }
   return params;
@@ -362,12 +558,11 @@ export default {
     try {
       let m;
 
-      // Health
       if (pathname === "/" || pathname === "/api/health") {
         return json({ ok: true, name: "tdwebtoon-api", time: nowMs(), d1: !!env.DB });
       }
 
-      // Novels
+      // ── Novels ──
       if (pathname === "/api/novels") {
         if (method === "GET") return json({ novels: await listNovels(env) });
         if (method === "POST") {
@@ -382,9 +577,9 @@ export default {
           const novel = await getNovel(env, m.slug);
           return novel ? json({ novel }) : bad(404, "not found");
         }
-        if (method === "PUT") {
+        if (method === "PUT" || method === "PATCH") {
           const body = await request.json().catch(() => ({}));
-          await updateNovelTitle(env, m.slug, body.title);
+          await updateNovel(env, m.slug, body);
           return json({ ok: true });
         }
         if (method === "DELETE") {
@@ -396,12 +591,23 @@ export default {
 
       if ((m = matchPath(pathname, "/api/novels/:slug/logs"))) {
         if (method === "GET") {
-          const limit = Number(url.searchParams.get("limit")) || 200;
+          const limit = Number(url.searchParams.get("limit")) || 500;
           return json({ logs: await listLogs(env, m.slug, limit) });
         }
         return bad(405, "Method not allowed");
       }
 
+      // ── Episode reorder ──
+      if ((m = matchPath(pathname, "/api/novels/:slug/episodes/reorder"))) {
+        if (method === "POST") {
+          const body = await request.json().catch(() => ({}));
+          await reorderEpisode(env, m.slug, body.fromId, body.toId);
+          return json({ ok: true });
+        }
+        return bad(405, "Method not allowed");
+      }
+
+      // ── Files (synopsis/character/world/episode) ──
       if ((m = matchPath(pathname, "/api/novels/:slug/files"))) {
         if (method === "GET") {
           const kind = url.searchParams.get("kind");
@@ -420,7 +626,7 @@ export default {
           const file = await getFile(env, m.slug, m.id);
           return file ? json({ file }) : bad(404, "not found");
         }
-        if (method === "PUT") {
+        if (method === "PUT" || method === "PATCH") {
           const body = await request.json().catch(() => ({}));
           return json({ file: await updateFile(env, m.slug, m.id, body) });
         }
@@ -432,9 +638,7 @@ export default {
       }
 
       if ((m = matchPath(pathname, "/api/novels/:slug/files/:id/versions"))) {
-        if (method === "GET") {
-          return json({ versions: await listVersions(env, m.id) });
-        }
+        if (method === "GET") return json({ versions: await listVersions(env, m.id) });
         return bad(405, "Method not allowed");
       }
 
@@ -444,6 +648,30 @@ export default {
           const v = Number(body.version);
           if (!v || v < 1) return bad(400, "version required");
           return json({ file: await rollbackFile(env, m.slug, m.id, v) });
+        }
+        return bad(405, "Method not allowed");
+      }
+
+      // ── Scenes ──
+      if ((m = matchPath(pathname, "/api/novels/:slug/episodes/:episodeId/scenes"))) {
+        if (method === "POST") {
+          const body = await request.json().catch(() => ({}));
+          return json(
+            { scene: await createScene(env, m.slug, m.episodeId, body) },
+            { status: 201 }
+          );
+        }
+        return bad(405, "Method not allowed");
+      }
+
+      if ((m = matchPath(pathname, "/api/novels/:slug/scenes/:sceneId"))) {
+        if (method === "PUT" || method === "PATCH") {
+          const body = await request.json().catch(() => ({}));
+          return json({ scene: await updateScene(env, m.slug, m.sceneId, body) });
+        }
+        if (method === "DELETE") {
+          await deleteScene(env, m.slug, m.sceneId);
+          return json({ ok: true });
         }
         return bad(405, "Method not allowed");
       }

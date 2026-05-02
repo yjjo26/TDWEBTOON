@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>소설 작업실 — TDWEBTOON</title>
+<link rel="stylesheet" href="styles.css">
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="data.jsx"></script>
+<script type="text/babel" src="components.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="screens-auth.jsx"></script>
+<script type="text/babel" src="screens-detail.jsx"></script>
+<script type="text/babel" src="screens-episodes.jsx"></script>
+<script type="text/babel" src="screens-log.jsx"></script>
+
+<script type="text/babel">
+const { useState, useEffect, useMemo, useCallback } = React;
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "density": "standard",
+  "theme": "dark",
+  "sidebarSide": "left",
+  "showPresence": true
+}/*EDITMODE-END*/;
+
+function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [authed, setAuthed] = useState(() => localStorage.getItem('td:auth') === '1');
+  const [novels, setNovels] = useState(() => {
+    try {
+      const saved = localStorage.getItem('td:novels');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return seedNovels;
+  });
+  const [route, setRoute] = useState(() => {
+    const last = localStorage.getItem('td:lastNovel');
+    return last ? { screen: 'detail', novelId: last } : { screen: 'list' };
+  });
+  const [tab, setTab] = useState(() => localStorage.getItem('td:lastTab') || 'plot');
+  const [tweaksOpen, setTweaksOpen] = useState(false);
+
+  // expose for header tab buttons
+  window.__appCtx = { tab, setTab };
+
+  useEffect(() => { localStorage.setItem('td:novels', JSON.stringify(novels)); }, [novels]);
+  useEffect(() => {
+    if (route.screen === 'detail' && route.novelId) localStorage.setItem('td:lastNovel', route.novelId);
+    else if (route.screen === 'list') localStorage.removeItem('td:lastNovel');
+  }, [route]);
+  useEffect(() => { localStorage.setItem('td:lastTab', tab); }, [tab]);
+
+  // theme
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', t.theme);
+    document.documentElement.setAttribute('data-density', t.density);
+  }, [t.theme, t.density]);
+
+  // keyboard shortcuts
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        const ev = new CustomEvent('td:shortcut-save');
+        window.dispatchEvent(ev);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const novel = route.novelId ? novels.find(n => n.id === route.novelId) : null;
+  const presence = t.showPresence ? collaborators : [collaborators[0]];
+
+  // ─── log helper ───
+  const addLog = (novelId, log) => {
+    setNovels(arr => arr.map(n => n.id === novelId ? {
+      ...n,
+      logs: [{ ...log, id: 'l' + Date.now(), time: new Date().toISOString(), user: 'me' }, ...n.logs],
+      updatedAt: new Date().toISOString(),
+    } : n));
+  };
+
+  // ─── novel ops ───
+  const createNovel = (title) => {
+    const id = 'n' + Date.now();
+    const colors = ['indigo', 'rose', 'teal', 'amber', 'slate'];
+    const newN = {
+      id, title, cover: colors[novels.length % colors.length],
+      summary: '', updatedAt: new Date().toISOString(),
+      storytelling: '', characters: [], settings: '',
+      episodes: [], logs: [{ id: 'l1', kind: 'add', target: '소설', label: title, time: new Date().toISOString(), user: 'me', before: null, after: title }],
+    };
+    setNovels(arr => [newN, ...arr]);
+  };
+  const deleteNovel = (id) => setNovels(arr => arr.filter(n => n.id !== id));
+
+  const updateNovel = (novelId, fn, log) => {
+    setNovels(arr => arr.map(n => n.id === novelId ? { ...fn(n), updatedAt: new Date().toISOString(), logs: log ? [{ ...log, id: 'l' + Date.now(), time: new Date().toISOString(), user: 'me' }, ...n.logs] : n.logs } : n));
+  };
+
+  // ─── handlers ───
+  const handlers = novel ? {
+    onTitleChange: (title) => updateNovel(novel.id, n => ({ ...n, title }), { kind: 'edit', target: '소설', label: '제목', before: novel.title, after: title }),
+    onSavePlot: (storytelling) => updateNovel(novel.id, n => ({ ...n, storytelling }), { kind: 'edit', target: '줄거리', label: 'storytelling_style.md', before: novel.storytelling.slice(0, 80) + (novel.storytelling.length > 80 ? '…' : ''), after: storytelling.slice(0, 80) + (storytelling.length > 80 ? '…' : '') }),
+    onSaveSettings: (settings) => updateNovel(novel.id, n => ({ ...n, settings }), { kind: 'edit', target: '배경', label: 'settings.md', before: (novel.settings||'').slice(0, 60) + '…', after: settings.slice(0, 60) + '…' }),
+    onSaveCharacter: (c) => {
+      const exists = novel.characters.find(x => x.id === c.id);
+      updateNovel(novel.id, n => ({ ...n, characters: exists ? n.characters.map(x => x.id === c.id ? c : x) : [...n.characters, c] }),
+        { kind: exists ? 'edit' : 'add', target: '캐릭터', label: c.name, before: exists ? exists.desc : null, after: c.desc });
+    },
+    onDeleteCharacter: (id) => {
+      const c = novel.characters.find(x => x.id === id);
+      updateNovel(novel.id, n => ({ ...n, characters: n.characters.filter(x => x.id !== id) }),
+        { kind: 'delete', target: '캐릭터', label: c.name, before: c.desc, after: null });
+    },
+    onSaveEpisode: (ep) => updateNovel(novel.id, n => ({ ...n, episodes: n.episodes.map(e => e.id === ep.id ? ep : e) }),
+      { kind: 'edit', target: '회차', label: ep.title, before: novel.episodes.find(e => e.id === ep.id)?.body.slice(0, 60) + '…', after: ep.body.slice(0, 60) + '…' }),
+    onAddEpisode: (ep) => updateNovel(novel.id, n => ({ ...n, episodes: [...n.episodes, ep] }),
+      { kind: 'add', target: '회차', label: ep.title, before: null, after: ep.title }),
+    onDeleteEpisode: (id) => {
+      const e = novel.episodes.find(x => x.id === id);
+      updateNovel(novel.id, n => ({ ...n, episodes: n.episodes.filter(x => x.id !== id) }),
+        { kind: 'delete', target: '회차', label: e.title, before: e.body.slice(0, 60), after: null });
+    },
+    onReorderEpisodes: (fromId, toId) => {
+      updateNovel(novel.id, n => {
+        const arr = n.episodes.slice();
+        const fromIdx = arr.findIndex(e => e.id === fromId);
+        const toIdx = arr.findIndex(e => e.id === toId);
+        const [item] = arr.splice(fromIdx, 1);
+        arr.splice(toIdx, 0, item);
+        return { ...n, episodes: arr };
+      }, { kind: 'edit', target: '회차', label: '순서 변경', before: '이전 순서', after: '새 순서' });
+    },
+    onUploadEpisode: () => {
+      const id = 'e' + Date.now();
+      updateNovel(novel.id, n => ({ ...n, episodes: [...n.episodes, { id, title: '업로드_' + new Date().toLocaleDateString('ko'), body: '업로드한 회차의 내용이 여기에…', scenes: [] }] }),
+        { kind: 'add', target: '회차', label: '업로드된 회차', before: null, after: 'md 파일' });
+    },
+    onAddScene: (epId, scene) => updateNovel(novel.id, n => ({ ...n, episodes: n.episodes.map(e => e.id === epId ? { ...e, scenes: [...e.scenes, scene] } : e) }),
+      { kind: 'add', target: '회차', label: '씬: ' + scene.situation.slice(0, 30), before: null, after: scene.situation }),
+    onSaveScene: (epId, scene) => updateNovel(novel.id, n => ({ ...n, episodes: n.episodes.map(e => e.id === epId ? { ...e, scenes: e.scenes.map(s => s.id === scene.id ? scene : s) } : e) }),
+      { kind: 'edit', target: '회차', label: '씬 수정', before: '이전', after: scene.situation.slice(0, 40) }),
+    onDeleteScene: (epId, sceneId) => updateNovel(novel.id, n => ({ ...n, episodes: n.episodes.map(e => e.id === epId ? { ...e, scenes: e.scenes.filter(s => s.id !== sceneId) } : e) }),
+      { kind: 'delete', target: '회차', label: '씬 삭제', before: '씬', after: null }),
+    onRollback: (log) => updateNovel(novel.id, n => n,
+      { kind: 'rollback', target: log.target, label: log.label, before: log.after, after: log.before }),
+    onExport: () => {
+      alert(`"${novel.title}"의 모든 .md 파일을 ZIP으로 묶고 있어요…\n\n(데모 — 실제 빌드에서는 다운로드가 시작됩니다)`);
+    },
+  } : {};
+
+  // ─── render ───
+  if (!authed) return <LoginScreen onLogin={() => { setAuthed(true); localStorage.setItem('td:auth', '1'); }} />;
+
+  if (route.screen === 'list') {
+    return (
+      <>
+        <NovelListScreen
+          novels={novels}
+          presence={presence}
+          onOpen={(id) => { setRoute({ screen: 'detail', novelId: id }); setTab('plot'); }}
+          onCreate={createNovel}
+          onDelete={deleteNovel}
+          onLogout={() => { setAuthed(false); localStorage.removeItem('td:auth'); }}
+        />
+        <AppTweaks t={t} setTweak={setTweak} />
+      </>
+    );
+  }
+
+  if (!novel) {
+    setRoute({ screen: 'list' });
+    return null;
+  }
+
+  return (
+    <>
+      <DetailHeader
+        novel={novel}
+        presence={presence}
+        onBack={() => setRoute({ screen: 'list' })}
+        onTitleChange={handlers.onTitleChange}
+        onLogout={() => { setAuthed(false); localStorage.removeItem('td:auth'); }}
+        onExport={handlers.onExport}
+        density={t.density}
+        onDensityChange={(v) => setTweak('density', v)}
+        theme={t.theme}
+        onThemeChange={(v) => setTweak('theme', v)}
+        onOpenTweaks={() => {
+          window.parent.postMessage({type:'__activate_edit_mode'}, '*');
+        }}
+      />
+      <main>
+        {tab === 'plot' && <PlotTab novel={novel} onSave={handlers.onSavePlot} />}
+        {tab === 'characters' && <CharactersTab novel={novel} onSave={handlers.onSaveCharacter} onDelete={handlers.onDeleteCharacter} />}
+        {tab === 'settings' && <SettingsTab novel={novel} onSave={handlers.onSaveSettings} />}
+        {tab === 'episodes' && <EpisodesTab
+          novel={novel}
+          sidebarSide={t.sidebarSide}
+          onSaveEpisode={handlers.onSaveEpisode}
+          onAddEpisode={handlers.onAddEpisode}
+          onDeleteEpisode={handlers.onDeleteEpisode}
+          onReorderEpisodes={handlers.onReorderEpisodes}
+          onUploadEpisode={handlers.onUploadEpisode}
+          onAddScene={handlers.onAddScene}
+          onSaveScene={handlers.onSaveScene}
+          onDeleteScene={handlers.onDeleteScene}
+        />}
+        {tab === 'log' && <LogTab novel={novel} onRollback={handlers.onRollback} />}
+      </main>
+      <AppTweaks t={t} setTweak={setTweak} />
+    </>
+  );
+}
+
+function AppTweaks({ t, setTweak }) {
+  return (
+    <TweaksPanel>
+      <TweakSection label="타이포 스케일" />
+      <TweakRadio
+        label="밀도"
+        value={t.density}
+        options={[
+          { value: 'compact', label: '조밀' },
+          { value: 'standard', label: '표준' },
+          { value: 'spacious', label: '넉넉' },
+        ]}
+        onChange={(v) => setTweak('density', v)}
+      />
+      <TweakSection label="테마" />
+      <TweakRadio
+        label="모드"
+        value={t.theme}
+        options={[
+          { value: 'light', label: '라이트' },
+          { value: 'dark', label: '다크' },
+        ]}
+        onChange={(v) => setTweak('theme', v)}
+      />
+      <TweakSection label="레이아웃" />
+      <TweakRadio
+        label="회차 사이드바"
+        value={t.sidebarSide}
+        options={[
+          { value: 'left', label: '왼쪽' },
+          { value: 'right', label: '오른쪽' },
+        ]}
+        onChange={(v) => setTweak('sidebarSide', v)}
+      />
+      <TweakToggle
+        label="공동 편집자 표시"
+        value={t.showPresence}
+        onChange={(v) => setTweak('showPresence', v)}
+      />
+    </TweaksPanel>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

@@ -1,16 +1,38 @@
+import { useEffect } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import LoginPage from "./pages/LoginPage";
 import NovelListPage from "./pages/NovelListPage";
 import NovelDetailPage from "./pages/NovelDetailPage";
-import SynopsisTab from "./pages/tabs/SynopsisTab";
+import PlotTab from "./pages/tabs/PlotTab";
 import CharactersTab from "./pages/tabs/CharactersTab";
-import BackgroundsTab from "./pages/tabs/BackgroundsTab";
+import SettingsTab from "./pages/tabs/SettingsTab";
 import EpisodesTab from "./pages/tabs/EpisodesTab";
-import LogsTab from "./pages/tabs/LogsTab";
+import LogTab from "./pages/tabs/LogTab";
+
+// 테마/밀도/사이드바 위치 — localStorage 에서 복원
+function applyHtmlAttrs() {
+  const theme = localStorage.getItem("td:theme") || "light";
+  const density = localStorage.getItem("td:density") || "standard";
+  document.documentElement.setAttribute("data-theme", theme);
+  document.documentElement.setAttribute("data-density", density);
+}
 
 export default function App() {
+  useEffect(() => {
+    applyHtmlAttrs();
+    const onStorage = (e) => {
+      if (e.key && e.key.startsWith("td:")) applyHtmlAttrs();
+    };
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("td:settings-changed", applyHtmlAttrs);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("td:settings-changed", applyHtmlAttrs);
+    };
+  }, []);
+
   return (
     <AuthProvider>
       <Routes>
@@ -32,12 +54,12 @@ export default function App() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<Navigate to="synopsis" replace />} />
-          <Route path="synopsis" element={<SynopsisTab />} />
+          <Route index element={<Navigate to="plot" replace />} />
+          <Route path="plot" element={<PlotTab />} />
           <Route path="characters" element={<CharactersTab />} />
-          <Route path="backgrounds" element={<BackgroundsTab />} />
+          <Route path="settings" element={<SettingsTab />} />
           <Route path="episodes" element={<EpisodesTab />} />
-          <Route path="logs" element={<LogsTab />} />
+          <Route path="log" element={<LogTab />} />
         </Route>
         <Route path="*" element={<Navigate to="/novels" replace />} />
       </Routes>

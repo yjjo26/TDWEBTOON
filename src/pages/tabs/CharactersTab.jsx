@@ -1,90 +1,211 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import * as api from "../../data/api";
-import EditableFile from "../../components/EditableFile";
+import EditableCard from "../../components/EditableCard";
+import IconButton from "../../components/IconButton";
+import Icon from "../../components/Icon";
 
 export default function CharactersTab() {
   const { novel, slug, refresh } = useOutletContext();
-  const [newName, setNewName] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [q, setQ] = useState("");
+  const [adding, setAdding] = useState(false);
 
-  const characters = novel.files
-    .filter((f) => f.kind === "character")
-    .sort((a, b) => a.title.localeCompare(b.title));
+  const characters = useMemo(
+    () => novel.files.filter((f) => f.kind === "character"),
+    [novel.files]
+  );
+  const filtered = useMemo(
+    () =>
+      characters.filter(
+        (c) => !q || c.title.includes(q) || (c.content || "").includes(q)
+      ),
+    [characters, q]
+  );
 
-  const onAdd = async (e) => {
-    e.preventDefault();
-    const name = newName.trim();
-    if (!name) return;
-    setBusy(true);
-    try {
-      // key 는 한글 그대로 (filesystem 친화적이지만 unique 만 되면 됨)
-      const key = name.replace(/[\\/]/g, "_").slice(0, 60);
-      await api.createFile(slug, {
-        kind: "character",
-        key,
-        title: name,
-        content: "",
-      });
-      setNewName("");
-      await refresh();
-    } catch (err) {
-      alert(`추가 실패: ${err.message}`);
-    } finally {
-      setBusy(false);
+  // EditableCard 는 { name, desc } 패턴을 사용 → 우리 file 모델로 매핑
+  const toCardItem = (file) => ({
+    id: file.id,
+    name: file.title,
+    desc: file.content,
+  });
+
+  const onSave = async (item) => {
+    if (item.id === "new") {
+      try {
+        const key = (item.name || "")
+          .replace(/[\\/]/g, "_")
+          .slice(0, 60) || `char-${Date.now().toString(36)}`;
+        await api.createFile(slug, {
+          kind: "character",
+          key,
+          title: item.name || "이름 없음",
+          content: item.desc || "",
+        });
+        await refresh();
+        setAdding(false);
+      } catch (e) {
+        alert(`추가 실패: ${e.message}`);
+      }
+    } else {
+      try {
+        await api.updateFile(slug, item.id, {
+          title: item.name,
+          content: item.desc,
+        });
+        await refresh();
+      } catch (e) {
+        alert(`저장 실패: ${e.message}`);
+      }
     }
   };
 
-  const saveFile = async (id, patch) => {
-    await api.updateFile(slug, id, patch);
-    await refresh();
-  };
-
-  const deleteFile = async (id) => {
-    await api.deleteFile(slug, id);
-    await refresh();
+  const onDelete = async (id) => {
+    try {
+      await api.deleteFile(slug, id);
+      await refresh();
+    } catch (e) {
+      alert(`삭제 실패: ${e.message}`);
+    }
   };
 
   return (
-    <section className="space-y-4">
-      <form
-        onSubmit={onAdd}
-        className="bg-white border border-slate-200 rounded-xl p-4 flex gap-2"
+    <div
+      className="page-in"
+      style={{ maxWidth: 1120, margin: "0 auto", padding: "32px 24px" }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          marginBottom: 16,
+          gap: 12,
+          flexWrap: "wrap",
+        }}
       >
-        <input
-          type="text"
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          placeholder="새 캐릭터 이름"
-          className="flex-1 border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-        />
-        <button
-          type="submit"
-          disabled={busy}
-          className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-medium rounded-lg px-4 py-2 transition"
+        <div>
+          <h2
+            className="serif"
+            style={{ fontSize: "var(--fs-2xl)", fontWeight: 800 }}
+          >
+            캐릭터
+          </h2>
+          <p
+            style={{
+              fontSize: "var(--fs-sm)",
+              color: "var(--ink-3)",
+              marginTop: 4,
+            }}
+          >
+            {characters.length}명의 인물
+          </p>
+        </div>
+        <div
+          style={{
+            display: "flex",
+            gap: 6,
+            flex: 1,
+            maxWidth: 480,
+            marginLeft: "auto",
+          }}
         >
-          {busy ? "..." : "추가"}
-        </button>
-      </form>
+          <div style={{ position: "relative", flex: 1 }}>
+            <Icon
+              name="search"
+              size={14}
+              style={{
+                position: "absolute",
+                left: 10,
+                top: "50%",
+                transform: "translateY(-50%)",
+                color: "var(--ink-4)",
+              }}
+            />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="이름, 설명으로 찾기"
+              className="input"
+              style={{ paddingLeft: 32 }}
+            />
+          </div>
+          <IconButton
+            icon="plus"
+            label="캐릭터 추가"
+            shortcut="⌘⇧A"
+            variant="primary"
+            onClick={() => setAdding(true)}
+            disabled={adding}
+          />
+        </div>
+      </div>
 
-      {characters.length === 0 ? (
-        <p className="text-slate-400 text-sm px-1">
-          등록된 캐릭터가 없습니다. (저장 시 <code>characters/&lt;이름&gt;.md</code> 형식으로 보관됨)
-        </p>
-      ) : (
-        <ul className="grid gap-3 sm:grid-cols-2">
-          {characters.map((f) => (
-            <li key={f.id}>
-              <EditableFile
-                file={f}
-                onSave={(patch) => saveFile(f.id, patch)}
-                onDelete={() => deleteFile(f.id)}
-                contentRows={4}
-              />
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+          gap: 12,
+        }}
+      >
+        {adding && (
+          <EditableCard
+            item={{ id: "new", name: "", desc: "" }}
+            autoEdit
+            fields={[
+              {
+                key: "name",
+                placeholder: "이름",
+                autoFocus: true,
+                bold: true,
+                large: true,
+              },
+              {
+                key: "desc",
+                type: "textarea",
+                placeholder: "나이, 외모, 성격, 배경… 자유롭게 적어주세요",
+                minHeight: 100,
+              },
+            ]}
+            onSave={onSave}
+            onCancelNew={() => setAdding(false)}
+          />
+        )}
+        {filtered.map((c) => (
+          <EditableCard
+            key={c.id}
+            item={toCardItem(c)}
+            fields={[
+              { key: "name", placeholder: "이름", bold: true, large: true },
+              {
+                key: "desc",
+                type: "textarea",
+                placeholder: "나이, 외모, 성격, 배경…",
+              },
+            ]}
+            onSave={onSave}
+            onDelete={onDelete}
+          />
+        ))}
+        {filtered.length === 0 && !adding && (
+          <div
+            style={{
+              gridColumn: "1 / -1",
+              textAlign: "center",
+              padding: 64,
+              color: "var(--ink-3)",
+            }}
+          >
+            <Icon
+              name="users"
+              size={28}
+              style={{ color: "var(--ink-4)", marginBottom: 8 }}
+            />
+            <p style={{ fontSize: "var(--fs-sm)" }}>
+              {q ? "검색 결과가 없어요" : "첫 캐릭터를 추가해보세요"}
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
