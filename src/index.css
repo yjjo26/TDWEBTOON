@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: system-ui, "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR",
+    Roboto, sans-serif;
+  background: #f7f7fa;
+  color: #1f2937;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Editable element subtle hint */
+.editable:hover {
+  outline: 1px dashed #cbd5e1;
+  cursor: text;
+}
