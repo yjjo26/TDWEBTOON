@@ -1,9 +1,8 @@
 // 디자인 spec 의 helper 들 (TD/data.jsx 참고)
 
 export const COLLABORATORS = [
-  { id: "me", name: "나", color: "#4F46E5", initials: "ME" },
-  { id: "editor1", name: "편집자", color: "#DB2777", initials: "편" },
-  { id: "writer2", name: "공동작가", color: "#059669", initials: "공" },
+  { id: "moody", name: "무디", color: "#4F46E5", initials: "무" },
+  { id: "cube", name: "큐브", color: "#059669", initials: "큐" },
 ];
 
 export function fmtTime(ms) {

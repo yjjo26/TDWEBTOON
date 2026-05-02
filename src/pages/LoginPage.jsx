@@ -191,7 +191,7 @@ export default function LoginPage() {
             marginTop: 20,
           }}
         >
-          공동 작업자는 공유받은 링크로 입장하세요 · 비밀번호 <code>1234</code>
+          공동 작업자는 공유받은 비밀번호로 입장하세요
         </p>
       </div>
     </div>

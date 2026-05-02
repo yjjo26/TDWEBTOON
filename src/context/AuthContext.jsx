@@ -1,34 +1,47 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useState } from "react";
 
-// 임시 더미 인증 — 추후 Firebase Auth 로 교체 예정.
-// 현재는 비밀번호 한 개로만 통과시키는 방식 (sessionStorage 에 로그인 상태 저장).
+// 다중 사용자 인증 (비밀번호 단일 매칭 → 사용자 식별)
+// 추후 Cloudflare Access / 토큰 인증 등으로 교체 예정.
 
 const AuthContext = createContext(null);
 
-const PASSWORD = "1234"; // TODO: Firebase 도입 시 제거
-const SESSION_KEY = "novel_app_auth_v1";
+// 비밀번호 → 사용자 매핑
+const USERS = {
+  moody1111: { id: "moody", name: "무디", initials: "무", color: "#4F46E5" },
+  cube1111: { id: "cube", name: "큐브", initials: "큐", color: "#059669" },
+};
+
+const SESSION_KEY = "td:user";
+
+function loadUser() {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
 
 export function AuthProvider({ children }) {
-  const [authed, setAuthed] = useState(
-    () => sessionStorage.getItem(SESSION_KEY) === "1"
-  );
-
-  useEffect(() => {
-    sessionStorage.setItem(SESSION_KEY, authed ? "1" : "0");
-  }, [authed]);
+  const [user, setUser] = useState(loadUser);
 
   const login = (password) => {
-    if (password === PASSWORD) {
-      setAuthed(true);
+    const u = USERS[password];
+    if (u) {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(u));
+      setUser(u);
       return true;
     }
     return false;
   };
 
-  const logout = () => setAuthed(false);
+  const logout = () => {
+    sessionStorage.removeItem(SESSION_KEY);
+    setUser(null);
+  };
 
   return (
-    <AuthContext.Provider value={{ authed, login, logout }}>
+    <AuthContext.Provider value={{ authed: !!user, user, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

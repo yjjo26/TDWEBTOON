@@ -306,8 +306,12 @@ export default function LogTab() {
               {filtered.map((l) => {
                 const isExp = expanded === l.id;
                 const user =
-                  COLLABORATORS.find((c) => c.id === l.user_label) ||
-                  COLLABORATORS[0];
+                  COLLABORATORS.find((c) => c.id === l.user_label) || {
+                    id: l.user_label || "anon",
+                    name: l.user_label || "익명",
+                    color: "#94A3B8",
+                    initials: (l.user_label || "?").slice(0, 1).toUpperCase(),
+                  };
                 const canRollback =
                   l.action === "update" && l.target_id && l.before_version;
                 return (

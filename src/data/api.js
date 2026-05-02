@@ -2,11 +2,22 @@
 export const API_BASE =
   import.meta.env.VITE_API_BASE || "https://tdwebtoon-api.yjj2662.workers.dev";
 
+function userHeader() {
+  try {
+    const u = JSON.parse(sessionStorage.getItem("td:user") || "null");
+    return u?.id ? { "X-User": u.id } : {};
+  } catch {
+    return {};
+  }
+}
+
 async function call(path, opts = {}) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...opts,
-  });
+  const headers = {
+    "Content-Type": "application/json",
+    ...userHeader(),
+    ...(opts.headers || {}),
+  };
+  const res = await fetch(`${API_BASE}${path}`, { ...opts, headers });
   const text = await res.text();
   let data = null;
   try {
