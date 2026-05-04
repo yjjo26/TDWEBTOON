@@ -153,7 +153,7 @@ function DetailHeader({ novel, onBack, onLogout, onExport, onImport, refresh }) 
           gap: 8,
         }}
       >
-        <IconButton icon="chevronLeft" label="목록으로" onClick={onBack} />
+        <IconButton icon="chevronLeft" label="목록으로" onClick={onBack} pos="bottom" align="start" />
 
         <div
           style={{
@@ -216,6 +216,7 @@ function DetailHeader({ novel, onBack, onLogout, onExport, onImport, refresh }) 
           label="전체 ZIP 업로드 (자동 매핑·씬 분리)"
           onClick={() => fileInputRef.current?.click()}
           align="end"
+          pos="bottom"
         />
         <input
           ref={fileInputRef}
@@ -233,6 +234,7 @@ function DetailHeader({ novel, onBack, onLogout, onExport, onImport, refresh }) 
           label="전체 .md ZIP 다운로드"
           onClick={onExport}
           align="end"
+          pos="bottom"
         />
         <div style={{ position: "relative" }}>
           <IconButton
@@ -240,12 +242,13 @@ function DetailHeader({ novel, onBack, onLogout, onExport, onImport, refresh }) 
             label="설정"
             onClick={() => setSettingsOpen((o) => !o)}
             align="end"
+            pos="bottom"
           />
           {settingsOpen && (
             <SettingsPopover onClose={() => setSettingsOpen(false)} />
           )}
         </div>
-        <IconButton icon="logout" label="로그아웃" onClick={onLogout} align="end" />
+        <IconButton icon="logout" label="로그아웃" onClick={onLogout} align="end" pos="bottom" />
       </div>
 
       <div style={{ maxWidth: 1280, margin: "0 auto", padding: "0 24px" }}>

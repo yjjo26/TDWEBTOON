@@ -332,6 +332,8 @@ textarea { resize: none; }
 .chip-rollback { background: var(--rollback-soft); color: var(--rollback); }
 
 [data-tooltip] { position: relative; }
+
+/* 기본: 아이콘 위로, 가운데 정렬 */
 [data-tooltip]:hover::after {
   content: attr(data-tooltip);
   position: absolute;
@@ -365,7 +367,7 @@ textarea { resize: none; }
   z-index: 9999;
 }
 
-/* 화면 우측 끝의 아이콘들 — 툴팁이 화면 밖으로 밀리는 걸 방지 */
+/* 좌/우 정렬 — 화면 끝 아이콘에서 툴팁이 밖으로 밀리는 걸 방지 */
 [data-tooltip-align="end"]:hover::after {
   left: auto;
   right: 0;
@@ -388,9 +390,21 @@ textarea { resize: none; }
   right: auto;
   transform: none;
 }
+
+/* 위치 = 아래 — sticky 헤더처럼 위쪽 공간이 없을 때 */
+[data-tooltip-pos="bottom"]:hover::after {
+  top: calc(100% + 6px);
+  bottom: auto;
+}
+[data-tooltip-pos="bottom"]:hover::before {
+  top: calc(100% + 2px);
+  bottom: auto;
+  border-top-color: transparent;
+  border-bottom-color: var(--ink-1);
+}
 @keyframes tipIn {
-  from { opacity: 0; transform: translate(-50%, 4px); }
-  to   { opacity: 1; transform: translate(-50%, 0); }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 .page-in { animation: pageIn 280ms var(--ease-out); }

@@ -14,6 +14,7 @@ export default function UploadButton({
   multiple = true,
   size,
   align,
+  pos,
 }) {
   const ref = useRef(null);
   const [busy, setBusy] = useState(false);
@@ -41,6 +42,7 @@ export default function UploadButton({
         label={label || ".md 업로드"}
         size={size}
         align={align}
+        pos={pos}
         onClick={() => ref.current?.click()}
         disabled={busy}
       />
