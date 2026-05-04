@@ -12,6 +12,7 @@ import { useAuth } from "../context/AuthContext";
 import Icon from "../components/Icon";
 import IconButton from "../components/IconButton";
 import { coverGradient } from "../data/utils";
+import { downloadNovelZip } from "../data/download";
 
 const TABS = [
   { to: "plot", label: "줄거리", icon: "fileText" },
@@ -71,10 +72,12 @@ export default function NovelDetailPage() {
     );
   }
 
-  const onExport = () => {
-    alert(
-      `"${novel.title}"의 .md 파일을 ZIP으로 묶는 기능은 다음 단계에서 추가됩니다.\n(현재는 알림만 표시)`
-    );
+  const onExport = async () => {
+    try {
+      await downloadNovelZip(novel);
+    } catch (e) {
+      alert(`다운로드 실패: ${e.message}`);
+    }
   };
 
   return (

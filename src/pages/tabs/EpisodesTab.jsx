@@ -6,6 +6,7 @@ import Icon from "../../components/Icon";
 import Confirm from "../../components/Confirm";
 import MentionTextarea from "../../components/MentionTextarea";
 import { countWords } from "../../data/utils";
+import { downloadKindZip, downloadMd } from "../../data/download";
 
 export default function EpisodesTab() {
   const { novel, slug, refresh } = useOutletContext();
@@ -216,6 +217,13 @@ export default function EpisodesTab() {
         </div>
         <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
           <IconButton
+            icon="download"
+            label="회차 전체 ZIP 다운로드"
+            size="sm"
+            onClick={() => downloadKindZip(novel, "episode")}
+            disabled={episodes.length === 0}
+          />
+          <IconButton
             icon="upload"
             label="회차 .md 업로드"
             size="sm"
@@ -394,11 +402,18 @@ export default function EpisodesTab() {
               />
             </>
           ) : (
-            <IconButton
-              icon="edit"
-              label="수정"
-              onClick={() => setEditing(true)}
-            />
+            <>
+              <IconButton
+                icon="download"
+                label="이 회차 .md 다운로드"
+                onClick={() => downloadMd(ep.title, ep.content)}
+              />
+              <IconButton
+                icon="edit"
+                label="수정"
+                onClick={() => setEditing(true)}
+              />
+            </>
           )}
         </div>
       </div>

@@ -3,6 +3,7 @@ import { useOutletContext } from "react-router-dom";
 import * as api from "../../data/api";
 import { countWords } from "../../data/utils";
 import IconButton from "../../components/IconButton";
+import { downloadMd } from "../../data/download";
 
 // 줄거리 (storytelling_style.md) — synopsis kind, key='main', 1 file per novel.
 export default function PlotTab() {
@@ -90,6 +91,11 @@ export default function PlotTab() {
           </p>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
+          <IconButton
+            icon="download"
+            label="storytelling_style.md 다운로드"
+            onClick={() => downloadMd("storytelling_style", val)}
+          />
           {dirty && (
             <>
               <IconButton icon="cancel" label="취소" onClick={cancel} disabled={busy} />

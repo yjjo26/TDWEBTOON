@@ -4,6 +4,7 @@ import * as api from "../../data/api";
 import EditableCard from "../../components/EditableCard";
 import IconButton from "../../components/IconButton";
 import Icon from "../../components/Icon";
+import { downloadKindZip } from "../../data/download";
 
 const TEMPLATE = "## 날씨\n\n## 건축물\n\n## 시대 배경\n\n## 기타\n";
 
@@ -132,6 +133,12 @@ export default function SettingsTab() {
               style={{ paddingLeft: 32 }}
             />
           </div>
+          <IconButton
+            icon="download"
+            label="배경 ZIP 다운로드"
+            onClick={() => downloadKindZip(novel, "world")}
+            disabled={items.length === 0}
+          />
           <IconButton
             icon="plus"
             label="배경 추가"
