@@ -3,6 +3,7 @@ import { useOutletContext } from "react-router-dom";
 import * as api from "../../data/api";
 import { countWords } from "../../data/utils";
 import IconButton from "../../components/IconButton";
+import UploadButton from "../../components/UploadButton";
 import { downloadMd } from "../../data/download";
 
 // 줄거리 (storytelling_style.md) — synopsis kind, key='main', 1 file per novel.
@@ -91,6 +92,14 @@ export default function PlotTab() {
           </p>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
+          <UploadButton
+            novel={novel}
+            slug={slug}
+            refresh={refresh}
+            kind="synopsis"
+            multiple={false}
+            label="줄거리 .md 업로드 (덮어쓰기)"
+          />
           <IconButton
             icon="download"
             label="storytelling_style.md 다운로드"
@@ -157,3 +166,4 @@ export default function PlotTab() {
     </div>
   );
 }
+

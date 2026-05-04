@@ -13,6 +13,7 @@ import Icon from "../components/Icon";
 import IconButton from "../components/IconButton";
 import { coverGradient } from "../data/utils";
 import { downloadNovelZip } from "../data/download";
+import { importZip, summarizeStats } from "../data/import";
 
 const TABS = [
   { to: "plot", label: "줄거리", icon: "fileText" },
@@ -80,6 +81,17 @@ export default function NovelDetailPage() {
     }
   };
 
+  const onImport = async (file) => {
+    if (!file) return;
+    try {
+      const stats = await importZip(novel, slug, file);
+      await refresh();
+      alert(`업로드 완료 — ${summarizeStats(stats)}`);
+    } catch (e) {
+      alert(`업로드 실패: ${e.message}`);
+    }
+  };
+
   return (
     <div className="page-in">
       <DetailHeader
@@ -87,6 +99,7 @@ export default function NovelDetailPage() {
         onBack={() => navigate("/novels")}
         onLogout={logout}
         onExport={onExport}
+        onImport={onImport}
         refresh={refresh}
       />
       <main>
@@ -96,10 +109,11 @@ export default function NovelDetailPage() {
   );
 }
 
-function DetailHeader({ novel, onBack, onLogout, onExport, refresh }) {
+function DetailHeader({ novel, onBack, onLogout, onExport, onImport, refresh }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(novel.title);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     setVal(novel.title);
@@ -197,6 +211,22 @@ function DetailHeader({ novel, onBack, onLogout, onExport, refresh }) {
           </h1>
         )}
 
+        <IconButton
+          icon="upload"
+          label="전체 ZIP 업로드 (자동 매핑·씬 분리)"
+          onClick={() => fileInputRef.current?.click()}
+        />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".zip,application/zip"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            e.target.value = "";
+            if (f) onImport(f);
+          }}
+          style={{ display: "none" }}
+        />
         <IconButton
           icon="download"
           label="전체 .md ZIP 다운로드"

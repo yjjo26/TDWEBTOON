@@ -3,6 +3,7 @@ import { useOutletContext } from "react-router-dom";
 import * as api from "../../data/api";
 import EditableCard from "../../components/EditableCard";
 import IconButton from "../../components/IconButton";
+import UploadButton from "../../components/UploadButton";
 import Icon from "../../components/Icon";
 import { downloadKindZip } from "../../data/download";
 
@@ -130,6 +131,13 @@ export default function CharactersTab() {
               style={{ paddingLeft: 32 }}
             />
           </div>
+          <UploadButton
+            novel={novel}
+            slug={slug}
+            refresh={refresh}
+            kind="character"
+            label="캐릭터 .md 다중 업로드 (이름 = 파일명)"
+          />
           <IconButton
             icon="download"
             label="캐릭터 ZIP 다운로드"

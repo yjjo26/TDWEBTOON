@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import * as api from "../../data/api";
 import IconButton from "../../components/IconButton";
+import UploadButton from "../../components/UploadButton";
 import Icon from "../../components/Icon";
 import Confirm from "../../components/Confirm";
 import MentionTextarea from "../../components/MentionTextarea";
@@ -11,7 +12,6 @@ import { downloadKindZip, downloadMd } from "../../data/download";
 export default function EpisodesTab() {
   const { novel, slug, refresh } = useOutletContext();
   const sidebarSide = localStorage.getItem("td:sidebar") || "left";
-  const fileInputRef = useRef(null);
 
   const episodes = useMemo(
     () =>
@@ -92,35 +92,6 @@ export default function EpisodesTab() {
       alert(`추가 실패: ${e.message}`);
     } finally {
       setBusy(false);
-    }
-  };
-
-  const onUpload = async (e) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-    setBusy(true);
-    try {
-      let n = nextEpisodeNumber();
-      let firstId = null;
-      for (const file of files) {
-        const text = await file.text();
-        const baseName = file.name.replace(/\.(md|txt)$/i, "");
-        const created = await api.createFile(slug, {
-          kind: "episode",
-          key: String(n),
-          title: baseName || `${n}화`,
-          content: text,
-        });
-        if (!firstId) firstId = created.id;
-        n++;
-      }
-      if (firstId) setSelectedId(firstId);
-      await refresh();
-    } catch (err) {
-      alert(`업로드 실패: ${err.message}`);
-    } finally {
-      setBusy(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -223,12 +194,13 @@ export default function EpisodesTab() {
             onClick={() => downloadKindZip(novel, "episode")}
             disabled={episodes.length === 0}
           />
-          <IconButton
-            icon="upload"
-            label="회차 .md 업로드"
+          <UploadButton
+            novel={novel}
+            slug={slug}
+            refresh={refresh}
+            kind="episode"
             size="sm"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={busy}
+            label="회차 .md 다중 업로드 (씬 자동 분리·기존 회차 갱신)"
           />
           <IconButton
             icon="plus"
@@ -238,14 +210,6 @@ export default function EpisodesTab() {
             size="sm"
             onClick={addNew}
             disabled={busy}
-          />
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept=".md,.txt,text/markdown,text/plain"
-            onChange={onUpload}
-            style={{ display: "none" }}
           />
         </div>
       </div>
