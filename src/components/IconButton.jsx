@@ -6,6 +6,7 @@ export default function IconButton({
   variant = "default",
   size = "md",
   shortcut,
+  align,
   onClick,
   disabled,
   className = "",
@@ -21,6 +22,7 @@ export default function IconButton({
       className={cls}
       title={tip}
       data-tooltip={tip}
+      data-tooltip-align={align}
       aria-label={label}
       onClick={onClick}
       disabled={disabled}

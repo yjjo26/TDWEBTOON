@@ -290,6 +290,10 @@ textarea { resize: none; }
   gap: 2px;
   border-bottom: 1px solid var(--border-1);
   overflow-x: auto;
+  scrollbar-width: none; /* Firefox */
+}
+.tab-bar::-webkit-scrollbar {
+  display: none; /* Chrome / Safari */
 }
 .tab {
   padding: 10px 14px;
@@ -340,7 +344,10 @@ textarea { resize: none; }
   border-radius: var(--r-sm);
   font-size: var(--fs-xs);
   font-weight: 500;
-  white-space: nowrap;
+  max-width: min(280px, calc(100vw - 24px));
+  white-space: normal;
+  text-align: center;
+  word-break: keep-all;
   pointer-events: none;
   z-index: 9999;
   animation: tipIn 150ms var(--ease-out);
@@ -356,6 +363,30 @@ textarea { resize: none; }
   border-top-color: var(--ink-1);
   pointer-events: none;
   z-index: 9999;
+}
+
+/* 화면 우측 끝의 아이콘들 — 툴팁이 화면 밖으로 밀리는 걸 방지 */
+[data-tooltip-align="end"]:hover::after {
+  left: auto;
+  right: 0;
+  transform: none;
+  text-align: right;
+}
+[data-tooltip-align="end"]:hover::before {
+  left: auto;
+  right: 12px;
+  transform: none;
+}
+[data-tooltip-align="start"]:hover::after {
+  left: 0;
+  right: auto;
+  transform: none;
+  text-align: left;
+}
+[data-tooltip-align="start"]:hover::before {
+  left: 12px;
+  right: auto;
+  transform: none;
 }
 @keyframes tipIn {
   from { opacity: 0; transform: translate(-50%, 4px); }

@@ -117,7 +117,7 @@ export default function NovelListPage() {
             소설 작업실
           </h1>
 
-          <IconButton icon="logout" label="로그아웃" onClick={logout} />
+          <IconButton icon="logout" label="로그아웃" onClick={logout} align="end" />
         </div>
       </header>
 

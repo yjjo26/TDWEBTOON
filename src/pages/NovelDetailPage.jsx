@@ -215,6 +215,7 @@ function DetailHeader({ novel, onBack, onLogout, onExport, onImport, refresh }) 
           icon="upload"
           label="전체 ZIP 업로드 (자동 매핑·씬 분리)"
           onClick={() => fileInputRef.current?.click()}
+          align="end"
         />
         <input
           ref={fileInputRef}
@@ -231,18 +232,20 @@ function DetailHeader({ novel, onBack, onLogout, onExport, onImport, refresh }) 
           icon="download"
           label="전체 .md ZIP 다운로드"
           onClick={onExport}
+          align="end"
         />
         <div style={{ position: "relative" }}>
           <IconButton
             icon="settings"
             label="설정"
             onClick={() => setSettingsOpen((o) => !o)}
+            align="end"
           />
           {settingsOpen && (
             <SettingsPopover onClose={() => setSettingsOpen(false)} />
           )}
         </div>
-        <IconButton icon="logout" label="로그아웃" onClick={onLogout} />
+        <IconButton icon="logout" label="로그아웃" onClick={onLogout} align="end" />
       </div>
 
       <div style={{ maxWidth: 1280, margin: "0 auto", padding: "0 24px" }}>
