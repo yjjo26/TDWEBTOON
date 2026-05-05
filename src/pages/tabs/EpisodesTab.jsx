@@ -24,6 +24,18 @@ export default function EpisodesTab() {
     () => novel.files.filter((f) => f.kind === "character"),
     [novel.files]
   );
+  const worlds = useMemo(
+    () => novel.files.filter((f) => f.kind === "world"),
+    [novel.files]
+  );
+  // @-멘션 자동완성 후보 (캐릭터 + 배경 통합)
+  const mentions = useMemo(
+    () => [
+      ...characters.map((c) => ({ id: c.id, title: c.title, kind: "character" })),
+      ...worlds.map((w) => ({ id: w.id, title: w.title, kind: "world" })),
+    ],
+    [characters, worlds]
+  );
 
   const [selectedId, setSelectedId] = useState(() => {
     const last = localStorage.getItem(`td:lastEp:${novel.slug}`);
@@ -385,8 +397,8 @@ export default function EpisodesTab() {
       <MentionTextarea
         value={editing ? draft.body : ep.content}
         onChange={(v) => editing && setDraft({ ...draft, body: v })}
-        characters={characters}
-        placeholder="회차 본문을 적어주세요. @를 입력하면 캐릭터 자동완성이 떠요."
+        mentions={mentions}
+        placeholder="회차 본문을 적어주세요. @를 입력하면 캐릭터·배경 자동완성이 떠요."
         readOnly={!editing}
         style={{
           minHeight: 360,
@@ -411,6 +423,7 @@ export default function EpisodesTab() {
         episodeId={ep.id}
         scenes={epScenes}
         characters={characters}
+        mentions={mentions}
         refresh={refresh}
       />
 
@@ -488,7 +501,7 @@ function EpisodeStats({ body, dirty }) {
   );
 }
 
-function SceneList({ slug, episodeId, scenes, characters, refresh }) {
+function SceneList({ slug, episodeId, scenes, characters, mentions, refresh }) {
   const [expanded, setExpanded] = useState(true);
   const [adding, setAdding] = useState(false);
   const [dragId, setDragId] = useState(null);
@@ -608,6 +621,7 @@ function SceneList({ slug, episodeId, scenes, characters, refresh }) {
             <SceneCard
               scene={{ id: "new", situation: "", characters: "[]", setting: "" }}
               characters={characters}
+              mentions={mentions}
               autoEdit
               onSave={onAdd}
               onCancel={() => setAdding(false)}
@@ -630,6 +644,7 @@ function SceneList({ slug, episodeId, scenes, characters, refresh }) {
                 scene={s}
                 index={i + 1}
                 characters={characters}
+                mentions={mentions}
                 onSave={onSave}
                 onDelete={onDelete}
               />
@@ -667,7 +682,7 @@ function parseChars(s) {
   }
 }
 
-function SceneCard({ scene, index, characters, autoEdit, onSave, onDelete, onCancel }) {
+function SceneCard({ scene, index, characters, mentions, autoEdit, onSave, onDelete, onCancel }) {
   const [editing, setEditing] = useState(autoEdit || false);
   const [draft, setDraft] = useState(() => ({
     ...scene,
@@ -751,14 +766,17 @@ function SceneCard({ scene, index, characters, autoEdit, onSave, onDelete, onCan
 
       {editing ? (
         <>
-          <textarea
-            value={draft.situation}
-            onChange={(e) => setDraft({ ...draft, situation: e.target.value })}
-            placeholder="상황 — 이 씬에서 무엇이 벌어지나요?"
-            className="input serif"
-            style={{ minHeight: 64, marginBottom: 8, lineHeight: 1.6 }}
-            autoFocus
-          />
+          <div style={{ marginBottom: 8 }}>
+            <MentionTextarea
+              value={draft.situation}
+              onChange={(v) => setDraft({ ...draft, situation: v })}
+              mentions={mentions}
+              placeholder="상황 — 무엇이 벌어지나요? @로 캐릭터·배경 멘션 가능"
+              className="input serif"
+              style={{ minHeight: 64, lineHeight: 1.6 }}
+              autoFocus
+            />
+          </div>
 
           <label
             style={{

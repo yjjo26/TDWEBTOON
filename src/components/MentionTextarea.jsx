@@ -1,25 +1,36 @@
 import { useRef, useState } from "react";
 import Icon from "./Icon";
 
-// @를 입력하면 캐릭터 자동완성. TD/components.jsx 1:1 포팅.
+// @를 입력하면 자동완성 (캐릭터/배경 등)
+// props.mentions: [{ id, title, kind }] — kind 별 아이콘 자동 표시
+//   - character → user 아이콘
+//   - world     → map 아이콘
+//   - 그 외      → user
+// props.characters (구버전 호환): characters 만 넘기면 자동으로 mentions 으로 매핑
 export default function MentionTextarea({
   value,
   onChange,
+  mentions,
   characters = [],
   placeholder,
   style,
   readOnly,
+  className = "input",
   ...rest
 }) {
+  const items =
+    mentions ||
+    (characters || []).map((c) => ({ ...c, kind: c.kind || "character" }));
+
   const [showSuggest, setShowSuggest] = useState(false);
   const [query, setQuery] = useState("");
   const [pos, setPos] = useState({ top: 0, left: 0 });
   const [activeIdx, setActiveIdx] = useState(0);
   const ref = useRef(null);
 
-  const filtered = characters
-    .filter((c) => c.title.includes(query))
-    .slice(0, 5);
+  const filtered = items
+    .filter((m) => (m.title || "").includes(query))
+    .slice(0, 8);
 
   const handleChange = (e) => {
     const v = e.target.value;
@@ -42,17 +53,17 @@ export default function MentionTextarea({
     }
   };
 
-  const insert = (char) => {
+  const insert = (item) => {
     const v = ref.current.value;
     const cursor = ref.current.selectionStart;
     const before = v.slice(0, cursor).replace(/@[^\s@]*$/, "");
     const after = v.slice(cursor);
-    const next = `${before}@${char.title} ${after}`;
+    const next = `${before}@${item.title} ${after}`;
     onChange?.(next);
     setShowSuggest(false);
     setTimeout(() => {
       ref.current.focus();
-      const newPos = before.length + char.title.length + 2;
+      const newPos = before.length + item.title.length + 2;
       ref.current.setSelectionRange(newPos, newPos);
     }, 0);
   };
@@ -74,6 +85,10 @@ export default function MentionTextarea({
     if (e.key === "Escape") setShowSuggest(false);
   };
 
+  const iconFor = (kind) => (kind === "world" ? "map" : "user");
+  const labelFor = (kind) =>
+    ({ character: "캐릭터", world: "배경" }[kind] || "");
+
   return (
     <div style={{ position: "relative" }}>
       <textarea
@@ -83,7 +98,7 @@ export default function MentionTextarea({
         onKeyDown={onKeyDown}
         placeholder={placeholder}
         readOnly={readOnly}
-        className="input"
+        className={className}
         style={style}
         {...rest}
       />
@@ -99,15 +114,15 @@ export default function MentionTextarea({
             borderRadius: "var(--r-md)",
             boxShadow: "var(--shadow-lg)",
             padding: 4,
-            minWidth: 180,
+            minWidth: 200,
           }}
         >
-          {filtered.map((c, i) => (
+          {filtered.map((m, i) => (
             <button
-              key={c.id}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                insert(c);
+              key={`${m.kind || "?"}-${m.id}`}
+              onMouseDown={(ev) => {
+                ev.preventDefault();
+                insert(m);
               }}
               style={{
                 display: "flex",
@@ -123,8 +138,22 @@ export default function MentionTextarea({
                 textAlign: "left",
               }}
             >
-              <Icon name="user" size={14} />
-              {c.title}
+              <Icon name={iconFor(m.kind)} size={14} />
+              <span style={{ flex: 1 }}>{m.title}</span>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color:
+                    i === activeIdx
+                      ? "var(--accent)"
+                      : "var(--ink-4)",
+                  letterSpacing: "var(--tracking-wide)",
+                  textTransform: "uppercase",
+                }}
+              >
+                {labelFor(m.kind)}
+              </span>
             </button>
           ))}
           <div
@@ -144,9 +173,9 @@ export default function MentionTextarea({
   );
 }
 
-export function renderWithMentions(text, characters) {
+export function renderWithMentions(text, mentions) {
   if (!text) return null;
-  const names = characters.map((c) => c.title);
+  const names = (mentions || []).map((m) => m.title);
   if (!names.length) return text;
   const re = new RegExp(`@(${names.join("|")})`, "g");
   const parts = [];
