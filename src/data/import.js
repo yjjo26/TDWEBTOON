@@ -10,6 +10,17 @@ import * as api from "./api";
 // ─── Scene 파서 (download.js 의 buildEpisodeMd 와 1:1 대응) ───
 const SCENE_BLOCK_RE = /^<!--\s*씬\s*카드[^\n]*\n([\s\S]*?)\n-->\s*\n?/;
 
+// 새 포맷:
+//   01. 상황 텍스트
+//       배경: @배경이름
+//       @캐릭터1: "대사"
+//       @캐릭터2
+// 구 포맷도 호환:
+//       캐릭터: @한서린, @도진우     (대사 없음)
+//       배경: 자유 텍스트            (배경 이름 매칭 안 되면 settingName 으로 보존)
+//
+// 반환 scenes: [{ situation, settingName, characters: [{name, dialogue}] }]
+// (이름은 호출측에서 ID 로 매핑)
 export function parseEpisodeScenes(content) {
   const m = String(content || "").match(SCENE_BLOCK_RE);
   if (!m) return { scenes: [], strippedBody: content || "" };
@@ -23,20 +34,50 @@ export function parseEpisodeScenes(content) {
     const sceneMatch = line.match(/^\s*\d+\.\s*(.+)$/);
     if (sceneMatch) {
       if (cur) scenes.push(cur);
-      cur = { situation: sceneMatch[1].trim(), setting: "", characters: [] };
+      cur = { situation: sceneMatch[1].trim(), settingName: "", characters: [] };
       continue;
     }
     if (!cur) continue;
-    const charMatch = line.match(/^\s+캐릭터\s*[:：]\s*(.+)$/);
-    if (charMatch) {
-      cur.characters = charMatch[1]
+
+    // 배경: @이름  또는  배경: 자유 텍스트
+    const setMatch = line.match(/^\s+배경\s*[:：]\s*(.+)$/);
+    if (setMatch) {
+      cur.settingName = setMatch[1].trim().replace(/^@/, "");
+      continue;
+    }
+
+    // 구 포맷: 캐릭터: @이름1, @이름2
+    const charsListMatch = line.match(/^\s+캐릭터\s*[:：]\s*(.+)$/);
+    if (charsListMatch) {
+      const names = charsListMatch[1]
         .split(/[,，、]/)
         .map((s) => s.trim().replace(/^@/, ""))
         .filter(Boolean);
+      for (const name of names) {
+        if (!cur.characters.find((c) => c.name === name)) {
+          cur.characters.push({ name, dialogue: "" });
+        }
+      }
       continue;
     }
-    const setMatch = line.match(/^\s+배경\s*[:：]\s*(.+)$/);
-    if (setMatch) cur.setting = setMatch[1].trim();
+
+    // 신 포맷: @이름        또는  @이름: "대사"
+    const charLineMatch = line.match(/^\s+@([^\s:：]+)\s*[:：]?\s*(.*)$/);
+    if (charLineMatch) {
+      const name = charLineMatch[1].trim();
+      let dialogue = (charLineMatch[2] || "").trim();
+      // JSON 으로 감싼 대사 ("..." 포함) 시도
+      if (dialogue.startsWith('"') && dialogue.endsWith('"')) {
+        try {
+          dialogue = JSON.parse(dialogue);
+        } catch {
+          dialogue = dialogue.slice(1, -1);
+        }
+      }
+      const existing = cur.characters.find((c) => c.name === name);
+      if (existing) existing.dialogue = dialogue;
+      else cur.characters.push({ name, dialogue });
+    }
   }
   if (cur) scenes.push(cur);
   return { scenes, strippedBody };
@@ -61,13 +102,16 @@ class Importer {
     this.files = [...(novel.files || [])];
     this.scenes = [...(novel.scenes || [])];
     this.charByName = new Map();
-    this.refreshCharIndex();
+    this.worldByName = new Map();
+    this.refreshIndex();
   }
 
-  refreshCharIndex() {
+  refreshIndex() {
     this.charByName.clear();
+    this.worldByName.clear();
     for (const f of this.files) {
       if (f.kind === "character") this.charByName.set(f.title, f.id);
+      if (f.kind === "world") this.worldByName.set(f.title, f.id);
     }
   }
 
@@ -96,12 +140,13 @@ class Importer {
         content,
       });
       this.files.push(created);
-      if (kind === "character") this.refreshCharIndex();
+      if (kind === "character" || kind === "world") this.refreshIndex();
       return { id: created.id, action: "create", title: created.title };
     }
   }
 
   // 회차의 기존 씬을 모두 지우고, 파싱된 씬들로 재생성
+  // parsed[i]: { situation, settingName, characters: [{name, dialogue}] }
   async replaceScenes(episodeId, parsed) {
     const old = this.scenes.filter((s) => s.episode_id === episodeId);
     for (const s of old) {
@@ -114,14 +159,22 @@ class Importer {
     this.scenes = this.scenes.filter((s) => s.episode_id !== episodeId);
 
     for (const ps of parsed) {
-      const charIds = ps.characters
-        .map((name) => this.charByName.get(name))
+      // characters: name → {id, dialogue} (이름 매칭 안 되면 스킵)
+      const chars = (ps.characters || [])
+        .map((c) => {
+          const id = this.charByName.get(c.name);
+          return id ? { id, dialogue: c.dialogue || "" } : null;
+        })
         .filter(Boolean);
+      // setting: 이름 → world ID (매칭 안 되면 빈 문자열)
+      const settingId = ps.settingName
+        ? this.worldByName.get(ps.settingName) || ""
+        : "";
       try {
         const created = await api.createScene(this.slug, episodeId, {
           situation: ps.situation,
-          setting: ps.setting,
-          characters: charIds,
+          setting: settingId,
+          characters: chars,
         });
         this.scenes.push(created);
       } catch {

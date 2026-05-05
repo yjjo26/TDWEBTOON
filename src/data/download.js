@@ -70,7 +70,7 @@ export async function downloadNovelZip(novel) {
     worldFolder.file(`${safeName(w.title)}.md`, w.content || "");
   }
 
-  // episodes/ + 씬 메타 (씬은 episodes 본문 위에 frontmatter 로)
+  // episodes/ + 씬 메타 (씬은 episodes 본문 위에 코멘트 블록으로)
   const epFolder = zip.folder("episodes");
   const episodes = (novel.files || [])
     .filter((f) => f.kind === "episode")
@@ -81,7 +81,7 @@ export async function downloadNovelZip(novel) {
       .sort((a, b) => (a.position || 0) - (b.position || 0));
     epFolder.file(
       `${safeName(e.title)}.md`,
-      buildEpisodeMd(e.content || "", epScenes, characters)
+      buildEpisodeMd(e.content || "", epScenes, characters, worlds)
     );
   }
 
@@ -104,33 +104,58 @@ function kindFolder(kind) {
   );
 }
 
-function buildEpisodeMd(body, scenes, characters) {
+function buildEpisodeMd(body, scenes, characters, worlds) {
   if (!scenes || scenes.length === 0) return body;
   const charById = new Map(characters.map((c) => [c.id, c.title]));
+  const worldById = new Map((worlds || []).map((w) => [w.id, w.title]));
   const lines = [];
   lines.push("<!-- 씬 카드 (자동 생성)");
   scenes.forEach((s, i) => {
-    const charsArr = parseChars(s.characters)
-      .map((id) => charById.get(id) || id)
-      .filter(Boolean);
-    lines.push(`${String(i + 1).padStart(2, "0")}. ${s.situation || "(상황 미입력)"}`);
-    if (charsArr.length) lines.push(`    캐릭터: ${charsArr.map((n) => "@" + n).join(", ")}`);
-    if (s.setting) lines.push(`    배경: ${s.setting}`);
+    const charsArr = normalizeChars(s.characters)
+      .map((c) => ({
+        name: charById.get(c.id),
+        dialogue: c.dialogue || "",
+      }))
+      .filter((c) => c.name);
+    const settingTitle = worldById.get(s.setting) || s.setting || "";
+    lines.push(
+      `${String(i + 1).padStart(2, "0")}. ${s.situation || "(상황 미입력)"}`
+    );
+    if (settingTitle) lines.push(`    배경: @${settingTitle}`);
+    for (const c of charsArr) {
+      if (c.dialogue) {
+        lines.push(`    @${c.name}: ${JSON.stringify(c.dialogue)}`);
+      } else {
+        lines.push(`    @${c.name}`);
+      }
+    }
   });
   lines.push("-->");
   lines.push("");
   return lines.join("\n") + body;
 }
 
-function parseChars(s) {
-  if (Array.isArray(s)) return s;
-  if (!s) return [];
-  try {
-    const v = JSON.parse(s);
-    return Array.isArray(v) ? v : [];
-  } catch {
-    return [];
+function normalizeChars(s) {
+  let raw;
+  if (Array.isArray(s)) raw = s;
+  else if (!s) raw = [];
+  else {
+    try {
+      const v = JSON.parse(s);
+      raw = Array.isArray(v) ? v : [];
+    } catch {
+      raw = [];
+    }
   }
+  return raw
+    .map((it) =>
+      typeof it === "string"
+        ? { id: it, dialogue: "" }
+        : it && typeof it === "object" && it.id
+        ? { id: it.id, dialogue: it.dialogue || "" }
+        : null
+    )
+    .filter(Boolean);
 }
 
 function manifestYaml(novel, opts = {}) {

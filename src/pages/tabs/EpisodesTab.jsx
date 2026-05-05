@@ -6,6 +6,7 @@ import UploadButton from "../../components/UploadButton";
 import Icon from "../../components/Icon";
 import Confirm from "../../components/Confirm";
 import MentionTextarea from "../../components/MentionTextarea";
+import PickerInput from "../../components/PickerInput";
 import { countWords } from "../../data/utils";
 import { downloadKindZip, downloadMd } from "../../data/download";
 
@@ -423,6 +424,7 @@ export default function EpisodesTab() {
         episodeId={ep.id}
         scenes={epScenes}
         characters={characters}
+        worlds={worlds}
         mentions={mentions}
         refresh={refresh}
       />
@@ -501,7 +503,7 @@ function EpisodeStats({ body, dirty }) {
   );
 }
 
-function SceneList({ slug, episodeId, scenes, characters, mentions, refresh }) {
+function SceneList({ slug, episodeId, scenes, characters, worlds, mentions, refresh }) {
   const [expanded, setExpanded] = useState(true);
   const [adding, setAdding] = useState(false);
   const [dragId, setDragId] = useState(null);
@@ -621,6 +623,7 @@ function SceneList({ slug, episodeId, scenes, characters, mentions, refresh }) {
             <SceneCard
               scene={{ id: "new", situation: "", characters: "[]", setting: "" }}
               characters={characters}
+              worlds={worlds}
               mentions={mentions}
               autoEdit
               onSave={onAdd}
@@ -644,6 +647,7 @@ function SceneList({ slug, episodeId, scenes, characters, mentions, refresh }) {
                 scene={s}
                 index={i + 1}
                 characters={characters}
+                worlds={worlds}
                 mentions={mentions}
                 onSave={onSave}
                 onDelete={onDelete}
@@ -671,50 +675,111 @@ function SceneList({ slug, episodeId, scenes, characters, mentions, refresh }) {
   );
 }
 
-function parseChars(s) {
-  if (Array.isArray(s)) return s;
-  if (!s) return [];
-  try {
-    const v = JSON.parse(s);
-    return Array.isArray(v) ? v : [];
-  } catch {
-    return [];
-  }
+function SectionLabel({ children }) {
+  return (
+    <label
+      style={{
+        fontSize: 11,
+        fontWeight: 700,
+        color: "var(--ink-3)",
+        display: "block",
+        marginBottom: 4,
+        letterSpacing: "var(--tracking-wide)",
+        textTransform: "uppercase",
+      }}
+    >
+      {children}
+    </label>
+  );
 }
 
-function SceneCard({ scene, index, characters, mentions, autoEdit, onSave, onDelete, onCancel }) {
+// 씬 캐릭터 정규화 — 신·구 두 형식 모두 받아 [{id, dialogue}] 로 통일.
+//   구 (string-only) : ["char-id", "char-id2"]
+//   신              : [{ id: "char-id", dialogue: "..." }, ...]
+function normalizeChars(s) {
+  let raw;
+  if (Array.isArray(s)) raw = s;
+  else if (!s) raw = [];
+  else {
+    try {
+      const v = JSON.parse(s);
+      raw = Array.isArray(v) ? v : [];
+    } catch {
+      raw = [];
+    }
+  }
+  return raw
+    .map((it) =>
+      typeof it === "string"
+        ? { id: it, dialogue: "" }
+        : it && typeof it === "object" && it.id
+        ? { id: it.id, dialogue: it.dialogue || "" }
+        : null
+    )
+    .filter(Boolean);
+}
+
+function SceneCard({ scene, index, characters, worlds, mentions, autoEdit, onSave, onDelete, onCancel }) {
   const [editing, setEditing] = useState(autoEdit || false);
   const [draft, setDraft] = useState(() => ({
-    ...scene,
-    characters: parseChars(scene.characters),
+    situation: scene.situation || "",
+    setting: scene.setting || "",
+    characters: normalizeChars(scene.characters),
   }));
   const [confirmDel, setConfirmDel] = useState(false);
-  const [charPickerOpen, setCharPickerOpen] = useState(false);
 
   useEffect(() => {
     if (!editing) {
-      setDraft({ ...scene, characters: parseChars(scene.characters) });
+      setDraft({
+        situation: scene.situation || "",
+        setting: scene.setting || "",
+        characters: normalizeChars(scene.characters),
+      });
     }
   }, [scene.id, scene.situation, scene.setting, scene.characters, editing]);
 
-  const linkedChars = (draft.characters || [])
-    .map((id) => characters.find((c) => c.id === id))
-    .filter(Boolean);
+  const charById = new Map(characters.map((c) => [c.id, c]));
+  const worldById = new Map(worlds.map((w) => [w.id, w]));
 
-  const toggleChar = (id) => {
-    const cur = draft.characters || [];
+  // 보기 모드용
+  const linkedChars = (normalizeChars(scene.characters) || [])
+    .map((c) => ({ ...c, file: charById.get(c.id) }))
+    .filter((c) => c.file);
+  const linkedWorld = worldById.get(scene.setting);
+  // setting 이 ID 가 아니라 옛 자유 텍스트인 경우
+  const legacySetting = scene.setting && !linkedWorld ? scene.setting : null;
+
+  // 편집 모드 핸들러
+  const addChar = (item) => {
+    if ((draft.characters || []).find((c) => c.id === item.id)) return;
     setDraft({
       ...draft,
-      characters: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id],
+      characters: [...(draft.characters || []), { id: item.id, dialogue: "" }],
     });
   };
+  const removeChar = (id) => {
+    setDraft({
+      ...draft,
+      characters: (draft.characters || []).filter((c) => c.id !== id),
+    });
+  };
+  const updateDialogue = (id, dialogue) => {
+    setDraft({
+      ...draft,
+      characters: (draft.characters || []).map((c) =>
+        c.id === id ? { ...c, dialogue } : c
+      ),
+    });
+  };
+  const setWorld = (item) => setDraft({ ...draft, setting: item.id });
+  const clearWorld = () => setDraft({ ...draft, setting: "" });
 
   const save = () => {
     onSave({
       id: scene.id,
       situation: draft.situation,
       setting: draft.setting,
-      characters: draft.characters,
+      characters: draft.characters, // [{id, dialogue}]
     });
     if (!autoEdit) setEditing(false);
   };
@@ -722,10 +787,18 @@ function SceneCard({ scene, index, characters, mentions, autoEdit, onSave, onDel
   const cancel = () => {
     if (autoEdit) onCancel?.();
     else {
-      setDraft({ ...scene, characters: parseChars(scene.characters) });
+      setDraft({
+        situation: scene.situation || "",
+        setting: scene.setting || "",
+        characters: normalizeChars(scene.characters),
+      });
       setEditing(false);
     }
   };
+
+  const draftWorld = worldById.get(draft.setting);
+  const draftLegacy = draft.setting && !draftWorld ? draft.setting : null;
+  const excludeIds = (draft.characters || []).map((c) => c.id);
 
   return (
     <div
@@ -766,142 +839,163 @@ function SceneCard({ scene, index, characters, mentions, autoEdit, onSave, onDel
 
       {editing ? (
         <>
-          <div style={{ marginBottom: 8 }}>
+          {/* 상황 */}
+          <SectionLabel>상황</SectionLabel>
+          <div style={{ marginBottom: 12 }}>
             <MentionTextarea
               value={draft.situation}
               onChange={(v) => setDraft({ ...draft, situation: v })}
               mentions={mentions}
-              placeholder="상황 — 무엇이 벌어지나요? @로 캐릭터·배경 멘션 가능"
+              placeholder="무엇이 벌어지나요? @로 캐릭터·배경 멘션 가능"
               className="input serif"
               style={{ minHeight: 64, lineHeight: 1.6 }}
               autoFocus
             />
           </div>
 
-          <label
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              color: "var(--ink-3)",
-              display: "block",
-              marginBottom: 4,
-              letterSpacing: "var(--tracking-wide)",
-              textTransform: "uppercase",
-            }}
-          >
-            등장 캐릭터
-          </label>
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 4,
-              marginBottom: 8,
-              position: "relative",
-            }}
-          >
-            {linkedChars.map((c) => (
-              <span
-                key={c.id}
-                className="mention"
-                style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
-              >
-                @{c.title}
-                <button
-                  onClick={() => toggleChar(c.id)}
-                  title="제거"
-                  data-tooltip="제거"
-                  aria-label="제거"
-                  style={{ display: "inline-flex" }}
-                >
-                  <Icon name="close" size={10} />
-                </button>
-              </span>
-            ))}
-            <button
-              onClick={() => setCharPickerOpen((o) => !o)}
-              title="캐릭터 추가"
-              data-tooltip="캐릭터 추가"
-              aria-label="캐릭터 추가"
-              className="icon-btn sm"
-              style={{
-                width: 22,
-                height: 22,
-                borderRadius: "var(--r-sm)",
-                background: "var(--bg-raised)",
-              }}
-            >
-              <Icon name={charPickerOpen ? "close" : "at"} size={11} />
-            </button>
-            {charPickerOpen && (
-              <div
-                style={{
-                  position: "absolute",
-                  top: "100%",
-                  left: 0,
-                  marginTop: 4,
-                  zIndex: 50,
-                  background: "var(--bg-surface)",
-                  border: "1px solid var(--border-2)",
-                  borderRadius: "var(--r-md)",
-                  boxShadow: "var(--shadow-md)",
-                  padding: 4,
-                  minWidth: 160,
-                }}
-              >
-                {characters.length === 0 && (
-                  <div style={{ padding: 8, fontSize: 11, color: "var(--ink-4)" }}>
-                    등록된 캐릭터 없음
-                  </div>
-                )}
-                {characters.map((c) => {
-                  const sel = (draft.characters || []).includes(c.id);
-                  return (
-                    <button
-                      key={c.id}
-                      onClick={() => toggleChar(c.id)}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 6,
-                        width: "100%",
-                        padding: "4px 8px",
-                        fontSize: "var(--fs-sm)",
-                        borderRadius: "var(--r-sm)",
-                        textAlign: "left",
-                        background: sel ? "var(--accent-soft)" : "transparent",
-                        color: sel ? "var(--accent)" : "var(--ink-1)",
-                      }}
-                    >
-                      {sel && <Icon name="check" size={11} />}
-                      <span style={{ marginLeft: sel ? 0 : 17 }}>{c.title}</span>
-                    </button>
-                  );
-                })}
+          {/* 등장 캐릭터 + 대사 */}
+          <SectionLabel>등장 캐릭터 & 대사</SectionLabel>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
+            {(draft.characters || []).length === 0 && (
+              <div style={{ fontSize: 11, color: "var(--ink-4)", padding: "2px 4px" }}>
+                @ 입력으로 등록된 캐릭터를 추가하세요
               </div>
             )}
+            {(draft.characters || []).map((c) => {
+              const file = charById.get(c.id);
+              return (
+                <div
+                  key={c.id}
+                  style={{
+                    display: "flex",
+                    gap: 6,
+                    alignItems: "center",
+                  }}
+                >
+                  <span
+                    className="mention"
+                    style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 4 }}
+                  >
+                    @{file ? file.title : `(삭제됨)`}
+                  </span>
+                  <input
+                    value={c.dialogue}
+                    onChange={(e) => updateDialogue(c.id, e.target.value)}
+                    placeholder="대사 (선택)"
+                    className="input"
+                    style={{ flex: 1, padding: "6px 10px", fontSize: "var(--fs-sm)" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeChar(c.id)}
+                    title="제거"
+                    data-tooltip="제거"
+                    aria-label="제거"
+                    className="icon-btn sm"
+                    style={{ flexShrink: 0 }}
+                  >
+                    <Icon name="close" size={11} />
+                  </button>
+                </div>
+              );
+            })}
+            <PickerInput
+              items={characters.map((c) => ({
+                id: c.id,
+                title: c.title,
+                kind: "character",
+              }))}
+              exclude={excludeIds}
+              onPick={addChar}
+              placeholder={
+                characters.length === 0
+                  ? "(먼저 캐릭터 탭에서 캐릭터를 추가하세요)"
+                  : "@ 입력해서 캐릭터 추가"
+              }
+              size="sm"
+            />
           </div>
 
-          <label
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              color: "var(--ink-3)",
-              display: "block",
-              marginBottom: 4,
-              letterSpacing: "var(--tracking-wide)",
-              textTransform: "uppercase",
-            }}
-          >
-            배경
-          </label>
-          <input
-            value={draft.setting || ""}
-            onChange={(e) => setDraft({ ...draft, setting: e.target.value })}
-            placeholder="장소 / 시간 / 분위기"
-            className="input"
-            style={{ marginBottom: 8 }}
-          />
+          {/* 배경 — 하단, 단일 선택 */}
+          <SectionLabel>배경</SectionLabel>
+          <div style={{ marginBottom: 8 }}>
+            {draftWorld ? (
+              <div
+                style={{
+                  display: "flex",
+                  gap: 6,
+                  alignItems: "center",
+                  padding: "6px 10px",
+                  background: "var(--bg-raised)",
+                  borderRadius: "var(--r-md)",
+                  border: "1px solid var(--border-1)",
+                }}
+              >
+                <Icon
+                  name="map"
+                  size={12}
+                  style={{ color: "var(--ink-3)" }}
+                />
+                <span className="mention" style={{ flex: 1 }}>
+                  @{draftWorld.title}
+                </span>
+                <button
+                  type="button"
+                  onClick={clearWorld}
+                  title="배경 해제"
+                  data-tooltip="배경 해제"
+                  aria-label="배경 해제"
+                  className="icon-btn sm"
+                  style={{ flexShrink: 0 }}
+                >
+                  <Icon name="close" size={11} />
+                </button>
+              </div>
+            ) : draftLegacy ? (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 4,
+                  padding: "8px 10px",
+                  background: "var(--warn-soft)",
+                  borderRadius: "var(--r-md)",
+                  border: "1px solid var(--warn)",
+                }}
+              >
+                <div style={{ fontSize: 11, color: "var(--warn)", fontWeight: 700 }}>
+                  ⚠ 옛 자유 텍스트 (등록된 배경 아님): "{draftLegacy}"
+                </div>
+                <button
+                  type="button"
+                  onClick={clearWorld}
+                  style={{
+                    fontSize: 11,
+                    color: "var(--warn)",
+                    textDecoration: "underline",
+                    textAlign: "left",
+                  }}
+                >
+                  비우고 새 배경 선택
+                </button>
+              </div>
+            ) : (
+              <PickerInput
+                items={worlds.map((w) => ({
+                  id: w.id,
+                  title: w.title,
+                  kind: "world",
+                }))}
+                onPick={setWorld}
+                placeholder={
+                  worlds.length === 0
+                    ? "(먼저 배경 탭에서 배경을 추가하세요)"
+                    : "@ 입력해서 배경 선택"
+                }
+                size="sm"
+              />
+            )}
+          </div>
 
           <div
             style={{
@@ -940,30 +1034,49 @@ function SceneCard({ scene, index, characters, mentions, autoEdit, onSave, onDel
               fontSize: "var(--fs-sm)",
               color: "var(--ink-1)",
               lineHeight: 1.6,
-              marginBottom: 8,
+              marginBottom: 10,
+              whiteSpace: "pre-wrap",
             }}
           >
             {scene.situation || (
               <span style={{ color: "var(--ink-4)" }}>상황 미입력</span>
             )}
           </p>
+
           {linkedChars.length > 0 && (
             <div
               style={{
                 display: "flex",
-                flexWrap: "wrap",
+                flexDirection: "column",
                 gap: 4,
-                marginBottom: 6,
+                marginBottom: 8,
               }}
             >
               {linkedChars.map((c) => (
-                <span key={c.id} className="mention">
-                  @{c.title}
-                </span>
+                <div
+                  key={c.id}
+                  style={{
+                    display: "flex",
+                    gap: 6,
+                    alignItems: "baseline",
+                    fontSize: "var(--fs-sm)",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  <span className="mention" style={{ flexShrink: 0 }}>
+                    @{c.file.title}
+                  </span>
+                  {c.dialogue && (
+                    <span className="serif" style={{ color: "var(--ink-2)" }}>
+                      "{c.dialogue}"
+                    </span>
+                  )}
+                </div>
               ))}
             </div>
           )}
-          {scene.setting && (
+
+          {linkedWorld ? (
             <div
               style={{
                 fontSize: 11,
@@ -973,9 +1086,26 @@ function SceneCard({ scene, index, characters, mentions, autoEdit, onSave, onDel
                 gap: 4,
               }}
             >
-              <Icon name="map" size={11} /> {scene.setting}
+              <Icon name="map" size={11} />
+              <span className="mention" style={{ fontSize: 11 }}>
+                @{linkedWorld.title}
+              </span>
             </div>
-          )}
+          ) : legacySetting ? (
+            <div
+              style={{
+                fontSize: 11,
+                color: "var(--warn)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+              title="등록된 배경이 아닙니다 — 수정에서 다시 선택하세요"
+            >
+              <Icon name="map" size={11} /> {legacySetting} ⚠
+            </div>
+          ) : null}
+
           <div
             style={{
               display: "flex",
