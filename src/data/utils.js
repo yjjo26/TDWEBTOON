@@ -47,3 +47,68 @@ export function coverGradient(kind) {
 }
 
 export const COVER_OPTIONS = ["indigo", "rose", "teal", "amber", "slate"];
+
+// 씬 캐릭터 정규화 — 신·구 두 형식 모두 받아 [{id, dialogue}] 로 통일.
+export function normalizeChars(s) {
+  let raw;
+  if (Array.isArray(s)) raw = s;
+  else if (!s) raw = [];
+  else {
+    try {
+      const v = JSON.parse(s);
+      raw = Array.isArray(v) ? v : [];
+    } catch {
+      raw = [];
+    }
+  }
+  return raw
+    .map((it) =>
+      typeof it === "string"
+        ? { id: it, dialogue: "" }
+        : it && typeof it === "object" && it.id
+        ? { id: it.id, dialogue: it.dialogue || "" }
+        : null
+    )
+    .filter(Boolean);
+}
+
+// 씬 카드들을 본문(prose) 형태로 합치기 — 회차 본문 자동 렌더에 사용
+export function composeProseFromScenes(scenes, characters, worlds) {
+  if (!scenes || scenes.length === 0) return "";
+  const charById = new Map((characters || []).map((c) => [c.id, c.title]));
+  const worldById = new Map((worlds || []).map((w) => [w.id, w.title]));
+
+  const blocks = scenes.map((s, i) => {
+    const num = String(i + 1).padStart(2, "0");
+    const sit = (s.situation || "").trim() || "(상황 미입력)";
+    const worldName = worldById.get(s.setting) || "";
+    const chars = normalizeChars(s.characters);
+    const charNames = chars.map((c) => charById.get(c.id)).filter(Boolean);
+
+    const lines = [];
+    let header = `—— SCENE ${num} · ${sit}`;
+    if (worldName) header += `  [${worldName}]`;
+    lines.push(header);
+    if (charNames.length) lines.push(`등장: ${charNames.join(", ")}`);
+    lines.push("");
+
+    for (const c of chars) {
+      const name = charById.get(c.id);
+      if (!name) continue;
+      if (c.dialogue) {
+        lines.push(`"${c.dialogue}"`);
+        lines.push(`— ${name}`);
+        lines.push("");
+      }
+    }
+
+    // 마지막 빈 줄 제거
+    while (lines.length && lines[lines.length - 1] === "") lines.pop();
+    return lines.join("\n");
+  });
+
+  return blocks.join("\n\n\n");
+}
+
+// 다운로드 / 업로드 시 자동 영역과 추가 본문을 구분하는 마커
+export const MANUAL_BODY_MARKER = "<!-- ── 추가 본문 ── -->";

@@ -6,6 +6,7 @@
 //     (기존 씬은 모두 교체)
 import JSZip from "jszip";
 import * as api from "./api";
+import { MANUAL_BODY_MARKER } from "./utils";
 
 // ─── Scene 파서 (download.js 의 buildEpisodeMd 와 1:1 대응) ───
 const SCENE_BLOCK_RE = /^<!--\s*씬\s*카드[^\n]*\n([\s\S]*?)\n-->\s*\n?/;
@@ -21,11 +22,25 @@ const SCENE_BLOCK_RE = /^<!--\s*씬\s*카드[^\n]*\n([\s\S]*?)\n-->\s*\n?/;
 //
 // 반환 scenes: [{ situation, settingName, characters: [{name, dialogue}] }]
 // (이름은 호출측에서 ID 로 매핑)
+// 추가 본문(manual) 만 추출 — 자동 렌더 영역은 무시 (씬에서 재생성됨)
+function extractManualBody(after) {
+  if (!after) return "";
+  const idx = after.indexOf(MANUAL_BODY_MARKER);
+  if (idx >= 0) {
+    return after.slice(idx + MANUAL_BODY_MARKER.length).replace(/^\s+/, "");
+  }
+  // 마커 없으면 전체를 manual 로 본다 (legacy 호환 — 사용자가 직접 만든 .md)
+  return after;
+}
+
 export function parseEpisodeScenes(content) {
   const m = String(content || "").match(SCENE_BLOCK_RE);
-  if (!m) return { scenes: [], strippedBody: content || "" };
+  if (!m) {
+    return { scenes: [], strippedBody: extractManualBody(content || "") };
+  }
   const block = m[1];
-  const strippedBody = (content.slice(m[0].length) || "").replace(/^\s+/, "");
+  const after = (content.slice(m[0].length) || "").replace(/^\s+/, "");
+  const strippedBody = extractManualBody(after);
 
   const scenes = [];
   let cur = null;

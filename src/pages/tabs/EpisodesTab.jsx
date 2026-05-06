@@ -7,7 +7,11 @@ import Icon from "../../components/Icon";
 import Confirm from "../../components/Confirm";
 import MentionTextarea from "../../components/MentionTextarea";
 import PickerInput from "../../components/PickerInput";
-import { countWords } from "../../data/utils";
+import {
+  countWords,
+  composeProseFromScenes,
+  normalizeChars,
+} from "../../data/utils";
 import { downloadKindZip, downloadMd } from "../../data/download";
 
 export default function EpisodesTab() {
@@ -357,31 +361,6 @@ export default function EpisodesTab() {
           {editing ? (
             <>
               <IconButton
-                icon="sparkles"
-                label="씬 카드를 본문에 합치기 (기존 본문 교체)"
-                onClick={() => {
-                  if (epScenes.length === 0) {
-                    alert("씬 카드가 없습니다. 먼저 씬을 추가하세요.");
-                    return;
-                  }
-                  if (
-                    draft.body &&
-                    draft.body.trim() &&
-                    !confirm(
-                      "현재 본문을 씬 카드 합본으로 교체할까요?\n기존 본문은 사라집니다.\n(저장 전에 [취소] 로 되돌릴 수 있어요)"
-                    )
-                  )
-                    return;
-                  const composed = composeProseFromScenes(
-                    epScenes,
-                    characters,
-                    worlds
-                  );
-                  setDraft({ ...draft, body: composed });
-                }}
-                disabled={busy || epScenes.length === 0}
-              />
-              <IconButton
                 icon="trash"
                 label="삭제"
                 variant="danger"
@@ -420,29 +399,24 @@ export default function EpisodesTab() {
         </div>
       </div>
 
-      <MentionTextarea
-        value={editing ? draft.body : ep.content}
+      <BodyComposite
+        editing={editing}
+        scenes={epScenes}
+        characters={characters}
+        worlds={worlds}
+        manual={editing ? draft.body : ep.content}
         onChange={(v) => editing && setDraft({ ...draft, body: v })}
         mentions={mentions}
-        placeholder="회차 본문을 적어주세요. @를 입력하면 캐릭터·배경 자동완성이 떠요."
-        readOnly={!editing}
-        style={{
-          minHeight: 360,
-          background: "var(--bg-surface)",
-          border: editing
-            ? "1px solid var(--accent-border)"
-            : "1px solid var(--border-1)",
-          boxShadow: editing ? "var(--shadow-glow)" : "var(--shadow-sm)",
-          borderRadius: "var(--r-lg)",
-          padding: 24,
-          fontFamily: "var(--font-serif)",
-          fontSize: "var(--fs-md)",
-          lineHeight: 1.9,
-          color: editing ? "var(--ink-1)" : "var(--ink-2)",
-        }}
       />
 
-      <EpisodeStats body={editing ? draft.body : ep.content} dirty={dirty} />
+      <EpisodeStats
+        body={
+          composeProseFromScenes(epScenes, characters, worlds) +
+          "\n\n" +
+          (editing ? draft.body : ep.content || "")
+        }
+        dirty={dirty}
+      />
 
       <SceneList
         slug={slug}
@@ -700,45 +674,109 @@ function SceneList({ slug, episodeId, scenes, characters, worlds, mentions, refr
   );
 }
 
-// 씬 카드들을 본문(prose) 형태로 합치기 — 사용자가 그 위에서 다듬는 시드
-function composeProseFromScenes(scenes, characters, worlds) {
-  if (!scenes || scenes.length === 0) return "";
-  const charById = new Map(characters.map((c) => [c.id, c.title]));
-  const worldById = new Map(worlds.map((w) => [w.id, w.title]));
+// 본문 박스 = (씬 자동 렌더 — 읽기 전용) + (추가 본문 textarea)
+// 씬 카드 변경 시 위 영역이 즉시 갱신됨 — 추가 본문은 사용자 입력만 보존.
+function BodyComposite({
+  editing,
+  scenes,
+  characters,
+  worlds,
+  manual,
+  onChange,
+  mentions,
+}) {
+  const auto = composeProseFromScenes(scenes, characters, worlds);
+  const hasAuto = auto.length > 0;
 
-  const blocks = scenes.map((s, i) => {
-    const num = String(i + 1).padStart(2, "0");
-    const sit = (s.situation || "").trim() || "(상황 미입력)";
-    const worldName = worldById.get(s.setting) || "";
-    const chars = normalizeChars(s.characters);
-    const charNames = chars.map((c) => charById.get(c.id)).filter(Boolean);
+  return (
+    <div
+      style={{
+        background: "var(--bg-surface)",
+        border: editing
+          ? "1px solid var(--accent-border)"
+          : "1px solid var(--border-1)",
+        boxShadow: editing ? "var(--shadow-glow)" : "var(--shadow-sm)",
+        borderRadius: "var(--r-lg)",
+        overflow: "hidden",
+        transition: "all var(--dur) var(--ease-out)",
+      }}
+    >
+      {hasAuto && (
+        <>
+          <div
+            style={{
+              padding: "16px 20px",
+              fontSize: 11,
+              fontWeight: 700,
+              color: "var(--ink-3)",
+              letterSpacing: "var(--tracking-wide)",
+              textTransform: "uppercase",
+              borderBottom: "1px solid var(--border-1)",
+              background: "var(--bg-raised)",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <Icon name="sparkles" size={12} />
+            씬 자동 합본 — 아래 [씬 카드] 수정 시 즉시 갱신
+          </div>
+          <div
+            className="serif"
+            style={{
+              padding: "20px 24px",
+              fontSize: "var(--fs-md)",
+              lineHeight: 1.9,
+              color: "var(--ink-1)",
+              whiteSpace: "pre-wrap",
+              wordBreak: "keep-all",
+            }}
+          >
+            {auto}
+          </div>
+        </>
+      )}
 
-    const lines = [];
-    let header = `—— SCENE ${num} · ${sit}`;
-    if (worldName) header += `  [${worldName}]`;
-    lines.push(header);
-    if (charNames.length) {
-      lines.push(`등장: ${charNames.join(", ")}`);
-    }
-    lines.push("");
-
-    for (const c of chars) {
-      const name = charById.get(c.id);
-      if (!name) continue;
-      if (c.dialogue) {
-        lines.push(`"${c.dialogue}"`);
-        lines.push(`— ${name}`);
-        lines.push("");
-      }
-    }
-
-    // 씬 사이 자유 산문 자리
-    lines.push("(여기 서술을 적어주세요…)");
-
-    return lines.join("\n");
-  });
-
-  return blocks.join("\n\n\n");
+      <div
+        style={{
+          padding: "10px 20px 6px",
+          fontSize: 11,
+          fontWeight: 700,
+          color: "var(--ink-3)",
+          letterSpacing: "var(--tracking-wide)",
+          textTransform: "uppercase",
+          borderTop: hasAuto ? "1px dashed var(--border-2)" : "none",
+          background: "var(--bg-raised)",
+        }}
+      >
+        추가 본문 (씬 외 자유 서술)
+      </div>
+      <MentionTextarea
+        value={manual || ""}
+        onChange={onChange}
+        mentions={mentions}
+        placeholder={
+          hasAuto
+            ? "씬 사이/마무리 등 추가 서술을 자유롭게 적어주세요. @로 멘션 가능."
+            : "회차 본문을 적어주세요. @로 캐릭터·배경 자동완성이 떠요."
+        }
+        readOnly={!editing}
+        style={{
+          minHeight: hasAuto ? 200 : 360,
+          border: "none",
+          borderRadius: 0,
+          padding: "16px 24px 24px",
+          fontFamily: "var(--font-serif)",
+          fontSize: "var(--fs-md)",
+          lineHeight: 1.9,
+          color: editing ? "var(--ink-1)" : "var(--ink-2)",
+          background: "transparent",
+          width: "100%",
+          boxShadow: "none",
+        }}
+      />
+    </div>
+  );
 }
 
 function SectionLabel({ children }) {
@@ -759,31 +797,6 @@ function SectionLabel({ children }) {
   );
 }
 
-// 씬 캐릭터 정규화 — 신·구 두 형식 모두 받아 [{id, dialogue}] 로 통일.
-//   구 (string-only) : ["char-id", "char-id2"]
-//   신              : [{ id: "char-id", dialogue: "..." }, ...]
-function normalizeChars(s) {
-  let raw;
-  if (Array.isArray(s)) raw = s;
-  else if (!s) raw = [];
-  else {
-    try {
-      const v = JSON.parse(s);
-      raw = Array.isArray(v) ? v : [];
-    } catch {
-      raw = [];
-    }
-  }
-  return raw
-    .map((it) =>
-      typeof it === "string"
-        ? { id: it, dialogue: "" }
-        : it && typeof it === "object" && it.id
-        ? { id: it.id, dialogue: it.dialogue || "" }
-        : null
-    )
-    .filter(Boolean);
-}
 
 function SceneCard({ scene, index, characters, worlds, mentions, autoEdit, onSave, onDelete, onCancel }) {
   const [editing, setEditing] = useState(autoEdit || false);

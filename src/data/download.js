@@ -1,5 +1,10 @@
 // 브라우저 측 다운로드 유틸 (.md / .zip)
 import JSZip from "jszip";
+import {
+  composeProseFromScenes,
+  normalizeChars as normChars,
+  MANUAL_BODY_MARKER,
+} from "./utils";
 
 // 파일명에 쓸 수 없는 문자 제거 — 윈도우/맥/리눅스 모두 안전한 형태로
 function safeName(s) {
@@ -105,57 +110,55 @@ function kindFolder(kind) {
 }
 
 function buildEpisodeMd(body, scenes, characters, worlds) {
-  if (!scenes || scenes.length === 0) return body;
+  const hasScenes = scenes && scenes.length > 0;
   const charById = new Map(characters.map((c) => [c.id, c.title]));
   const worldById = new Map((worlds || []).map((w) => [w.id, w.title]));
-  const lines = [];
-  lines.push("<!-- 씬 카드 (자동 생성)");
-  scenes.forEach((s, i) => {
-    const charsArr = normalizeChars(s.characters)
-      .map((c) => ({
-        name: charById.get(c.id),
-        dialogue: c.dialogue || "",
-      }))
-      .filter((c) => c.name);
-    const settingTitle = worldById.get(s.setting) || s.setting || "";
-    lines.push(
-      `${String(i + 1).padStart(2, "0")}. ${s.situation || "(상황 미입력)"}`
-    );
-    if (settingTitle) lines.push(`    배경: @${settingTitle}`);
-    for (const c of charsArr) {
-      if (c.dialogue) {
-        lines.push(`    @${c.name}: ${JSON.stringify(c.dialogue)}`);
-      } else {
-        lines.push(`    @${c.name}`);
-      }
-    }
-  });
-  lines.push("-->");
-  lines.push("");
-  return lines.join("\n") + body;
-}
 
-function normalizeChars(s) {
-  let raw;
-  if (Array.isArray(s)) raw = s;
-  else if (!s) raw = [];
-  else {
-    try {
-      const v = JSON.parse(s);
-      raw = Array.isArray(v) ? v : [];
-    } catch {
-      raw = [];
-    }
+  // 1) 씬 카드 코멘트 블록 (구조 메타데이터 — 업로드 round-trip 용)
+  let commentBlock = "";
+  if (hasScenes) {
+    const lines = ["<!-- 씬 카드 (자동 생성)"];
+    scenes.forEach((s, i) => {
+      const charsArr = normChars(s.characters)
+        .map((c) => ({
+          name: charById.get(c.id),
+          dialogue: c.dialogue || "",
+        }))
+        .filter((c) => c.name);
+      const settingTitle = worldById.get(s.setting) || s.setting || "";
+      lines.push(
+        `${String(i + 1).padStart(2, "0")}. ${s.situation || "(상황 미입력)"}`
+      );
+      if (settingTitle) lines.push(`    배경: @${settingTitle}`);
+      for (const c of charsArr) {
+        if (c.dialogue) {
+          lines.push(`    @${c.name}: ${JSON.stringify(c.dialogue)}`);
+        } else {
+          lines.push(`    @${c.name}`);
+        }
+      }
+    });
+    lines.push("-->");
+    lines.push("");
+    commentBlock = lines.join("\n");
   }
-  return raw
-    .map((it) =>
-      typeof it === "string"
-        ? { id: it, dialogue: "" }
-        : it && typeof it === "object" && it.id
-        ? { id: it.id, dialogue: it.dialogue || "" }
-        : null
-    )
-    .filter(Boolean);
+
+  // 2) 씬 자동 합본 (사람·AI 가 읽는 prose)
+  const autoProse = hasScenes
+    ? composeProseFromScenes(scenes, characters, worlds)
+    : "";
+
+  // 3) 추가 본문 (사용자가 textarea 에 직접 쓴 부분)
+  const manual = (body || "").trim();
+
+  // 합치기
+  const parts = [commentBlock];
+  if (autoProse) parts.push(autoProse);
+  if (manual) {
+    if (autoProse) parts.push(`${MANUAL_BODY_MARKER}\n\n${manual}`);
+    else parts.push(manual);
+  }
+  return parts.filter(Boolean).join("\n\n");
 }
 
 function manifestYaml(novel, opts = {}) {
