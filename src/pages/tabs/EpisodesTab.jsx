@@ -357,6 +357,31 @@ export default function EpisodesTab() {
           {editing ? (
             <>
               <IconButton
+                icon="sparkles"
+                label="씬 카드를 본문에 합치기 (기존 본문 교체)"
+                onClick={() => {
+                  if (epScenes.length === 0) {
+                    alert("씬 카드가 없습니다. 먼저 씬을 추가하세요.");
+                    return;
+                  }
+                  if (
+                    draft.body &&
+                    draft.body.trim() &&
+                    !confirm(
+                      "현재 본문을 씬 카드 합본으로 교체할까요?\n기존 본문은 사라집니다.\n(저장 전에 [취소] 로 되돌릴 수 있어요)"
+                    )
+                  )
+                    return;
+                  const composed = composeProseFromScenes(
+                    epScenes,
+                    characters,
+                    worlds
+                  );
+                  setDraft({ ...draft, body: composed });
+                }}
+                disabled={busy || epScenes.length === 0}
+              />
+              <IconButton
                 icon="trash"
                 label="삭제"
                 variant="danger"
@@ -673,6 +698,47 @@ function SceneList({ slug, episodeId, scenes, characters, worlds, mentions, refr
       )}
     </div>
   );
+}
+
+// 씬 카드들을 본문(prose) 형태로 합치기 — 사용자가 그 위에서 다듬는 시드
+function composeProseFromScenes(scenes, characters, worlds) {
+  if (!scenes || scenes.length === 0) return "";
+  const charById = new Map(characters.map((c) => [c.id, c.title]));
+  const worldById = new Map(worlds.map((w) => [w.id, w.title]));
+
+  const blocks = scenes.map((s, i) => {
+    const num = String(i + 1).padStart(2, "0");
+    const sit = (s.situation || "").trim() || "(상황 미입력)";
+    const worldName = worldById.get(s.setting) || "";
+    const chars = normalizeChars(s.characters);
+    const charNames = chars.map((c) => charById.get(c.id)).filter(Boolean);
+
+    const lines = [];
+    let header = `—— SCENE ${num} · ${sit}`;
+    if (worldName) header += `  [${worldName}]`;
+    lines.push(header);
+    if (charNames.length) {
+      lines.push(`등장: ${charNames.join(", ")}`);
+    }
+    lines.push("");
+
+    for (const c of chars) {
+      const name = charById.get(c.id);
+      if (!name) continue;
+      if (c.dialogue) {
+        lines.push(`"${c.dialogue}"`);
+        lines.push(`— ${name}`);
+        lines.push("");
+      }
+    }
+
+    // 씬 사이 자유 산문 자리
+    lines.push("(여기 서술을 적어주세요…)");
+
+    return lines.join("\n");
+  });
+
+  return blocks.join("\n\n\n");
 }
 
 function SectionLabel({ children }) {
