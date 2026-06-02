@@ -730,7 +730,7 @@ function BodyComposite({
               color: "var(--ink-1)",
               whiteSpace: "pre-wrap",
               wordBreak: "keep-all",
-              maxHeight: 160,
+              maxHeight: 80,
               overflowY: "auto",
               background: "var(--bg-base)",
             }}
@@ -765,7 +765,7 @@ function BodyComposite({
         }
         readOnly={!editing}
         style={{
-          minHeight: hasAuto ? 550 : 700,
+          minHeight: hasAuto ? 1200 : 1500,
           border: "none",
           borderRadius: 0,
           padding: "16px 24px 24px",
