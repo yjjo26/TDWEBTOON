@@ -107,7 +107,7 @@ export function composeProseFromScenes(scenes, characters, worlds) {
     return lines.join("\n");
   });
 
-  return blocks.join("\n\n\n");
+  return blocks.join("\n");
 }
 
 // 다운로드 / 업로드 시 자동 영역과 추가 본문을 구분하는 마커
