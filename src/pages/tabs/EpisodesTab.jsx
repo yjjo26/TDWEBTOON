@@ -724,12 +724,15 @@ function BodyComposite({
           <div
             className="serif"
             style={{
-              padding: "20px 24px",
+              padding: "16px 24px",
               fontSize: "var(--fs-md)",
               lineHeight: 1.9,
               color: "var(--ink-1)",
               whiteSpace: "pre-wrap",
               wordBreak: "keep-all",
+              maxHeight: 160,
+              overflowY: "auto",
+              background: "var(--bg-base)",
             }}
           >
             {auto}
@@ -762,7 +765,7 @@ function BodyComposite({
         }
         readOnly={!editing}
         style={{
-          minHeight: hasAuto ? 200 : 360,
+          minHeight: hasAuto ? 550 : 700,
           border: "none",
           borderRadius: 0,
           padding: "16px 24px 24px",
