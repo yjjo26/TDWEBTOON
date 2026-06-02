@@ -766,6 +766,7 @@ function BodyComposite({
         readOnly={!editing}
         style={{
           minHeight: hasAuto ? 1200 : 1500,
+          height: hasAuto ? 1200 : 1500,
           border: "none",
           borderRadius: 0,
           padding: "16px 24px 24px",
