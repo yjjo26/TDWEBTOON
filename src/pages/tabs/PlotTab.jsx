@@ -67,13 +67,15 @@ export default function PlotTab() {
   const stats = countWords(val);
 
   return (
-    <div className="page-in" style={{ maxWidth: 880, margin: "0 auto", padding: "32px 24px" }}>
+    <div className="page-in" style={{ maxWidth: 880, margin: "0 auto", padding: "24px 16px" }}>
       <div
+        className="tab-header-toolbar"
         style={{
           display: "flex",
           alignItems: "baseline",
           justifyContent: "space-between",
           marginBottom: 16,
+          gap: 12,
         }}
       >
         <div>

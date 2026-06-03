@@ -53,6 +53,7 @@ export default function EpisodesTab() {
   const [dragId, setDragId] = useState(null);
   const [dropId, setDropId] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const ep = episodes.find((e) => e.id === selectedId);
   const epScenes = useMemo(
@@ -169,6 +170,7 @@ export default function EpisodesTab() {
 
   const Sidebar = (
     <aside
+      className={`sidebar-drawer ${sidebarOpen ? "open" : ""}`}
       style={{
         width: 260,
         flexShrink: 0,
@@ -252,7 +254,10 @@ export default function EpisodesTab() {
                 setDragId(null);
                 setDropId(null);
               }}
-              onClick={() => setSelectedId(e.id)}
+              onClick={() => {
+                setSelectedId(e.id);
+                setSidebarOpen(false);
+              }}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -327,6 +332,16 @@ export default function EpisodesTab() {
           marginBottom: 16,
         }}
       >
+        <button
+          className="icon-btn sidebar-toggle-btn"
+          onClick={() => setSidebarOpen((o) => !o)}
+          title="회차 목록"
+          data-tooltip="회차 목록"
+          aria-label="회차 목록"
+          style={{ marginRight: 4 }}
+        >
+          <Icon name="list" size={16} />
+        </button>
         {editing ? (
           <input
             value={draft.title}
@@ -459,19 +474,25 @@ export default function EpisodesTab() {
   );
 
   return (
-    <div
-      className="page-in"
-      style={{
-        maxWidth: 1280,
-        margin: "0 auto",
-        display: "flex",
-        flexDirection: sidebarSide === "right" ? "row-reverse" : "row",
-        minHeight: "calc(100vh - 110px)",
-      }}
-    >
-      {Sidebar}
-      {Editor}
-    </div>
+    <>
+      <div
+        className={`sidebar-overlay ${sidebarOpen ? "open" : ""}`}
+        onClick={() => setSidebarOpen(false)}
+      />
+      <div
+        className="page-in"
+        style={{
+          maxWidth: 1280,
+          margin: "0 auto",
+          display: "flex",
+          flexDirection: sidebarSide === "right" ? "row-reverse" : "row",
+          minHeight: "calc(100vh - 110px)",
+        }}
+      >
+        {Sidebar}
+        {Editor}
+      </div>
+    </>
   );
 }
 

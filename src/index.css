@@ -506,3 +506,140 @@ kbd {
 .draggable:hover .drag-handle { opacity: 1; }
 .draggable.dragging { opacity: 0.5; }
 .drop-target { border-top: 2px solid var(--accent); }
+
+/* ─── 모바일/태블릿 반응형 미디어 쿼리 (768px 이하) ─── */
+@media (max-width: 768px) {
+  /* 글로벌/레이아웃 패딩 조정 */
+  body, html {
+    font-size: var(--fs-sm);
+  }
+  
+  main {
+    padding: 12px 8px !important;
+  }
+  
+  header > div {
+    padding: 8px 12px !important;
+  }
+  
+  /* 소설 상세 헤더 반응형 */
+  .detail-header-container {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+  
+  .header-actions-row {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    gap: 6px !important;
+    width: 100% !important;
+    border-top: 1px dashed var(--border-1);
+    padding-top: 6px;
+  }
+
+  /* 소설 상세 탭 페이지 */
+  .page-in {
+    flex-direction: column !important;
+    min-height: auto !important;
+  }
+  
+  /* 모바일 Drawer Sidebar 반응형 */
+  .sidebar-drawer {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    height: 100vh !important;
+    width: 280px !important;
+    max-height: none !important;
+    z-index: 1000 !important;
+    transform: translateX(-100%);
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    border-right: 1px solid var(--border-1) !important;
+    border-left: none !important;
+    border-bottom: none !important;
+    box-shadow: var(--shadow-lg) !important;
+  }
+  
+  .sidebar-drawer.open {
+    transform: translateX(0) !important;
+  }
+  
+  /* 에디터 메인 영역 반응형 */
+  .page-in > div {
+    padding: 12px 8px !important;
+  }
+  
+  /* 씬 카드 그리드 강제 1열 배치 */
+  .page-in div[style*="display: grid"],
+  div[style*="display: grid"] {
+    grid-template-columns: 1fr !important;
+  }
+  
+  /* 씬 카드 내부 flex 레이아웃 래핑 보강 */
+  .card div[style*="display: flex"] {
+    flex-wrap: wrap !important;
+    gap: 4px !important;
+  }
+  
+  /* 본문 텍스트 창 최소 높이 및 스타일 조절 */
+  .page-in textarea {
+    min-height: 360px !important;
+    font-size: var(--fs-base) !important;
+  }
+  
+  /* 탭 네비게이션 가로 스크롤 시 버튼 간격 최적화 */
+  .tab-bar {
+    padding: 0 2px;
+  }
+  
+  .tab {
+    padding: 6px 8px;
+    font-size: var(--fs-xs);
+  }
+  
+  /* 탭 콘텐츠 헤더 툴바 반응형 */
+  .tab-header-toolbar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+  
+  .tab-header-toolbar > div:last-child {
+    width: 100% !important;
+    justify-content: flex-end !important;
+  }
+}
+
+/* 사이드바 오버레이 (모바일) */
+.sidebar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(15, 23, 42, 0.3);
+  backdrop-filter: blur(2px);
+  z-index: 999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease-out;
+}
+
+.sidebar-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* 모바일 전용 토글 버튼 */
+.sidebar-toggle-btn {
+  display: none !important;
+}
+
+@media (max-width: 768px) {
+  .sidebar-toggle-btn {
+    display: inline-flex !important;
+  }
+}
+

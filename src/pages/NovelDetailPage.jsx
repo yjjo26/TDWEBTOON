@@ -144,6 +144,7 @@ function DetailHeader({ novel, onBack, onLogout, onExport, onImport, refresh }) 
       }}
     >
       <div
+        className="detail-header-container"
         style={{
           maxWidth: 1280,
           margin: "0 auto",
@@ -153,102 +154,118 @@ function DetailHeader({ novel, onBack, onLogout, onExport, onImport, refresh }) 
           gap: 8,
         }}
       >
-        <IconButton icon="chevronLeft" label="목록으로" onClick={onBack} pos="bottom" align="start" />
-
         <div
+          className="header-title-row"
           style={{
-            width: 24,
-            height: 30,
-            borderRadius: 3,
-            background: coverGradient(novel.cover),
-            flexShrink: 0,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flex: 1,
+            minWidth: 0,
           }}
-        />
+        >
+          <IconButton icon="chevronLeft" label="목록으로" onClick={onBack} pos="bottom" align="start" />
 
-        {editing ? (
-          <input
-            autoFocus
-            value={val}
-            onChange={(e) => setVal(e.target.value)}
-            onBlur={commitTitle}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") commitTitle();
-              if (e.key === "Escape") {
-                setVal(novel.title);
-                setEditing(false);
-              }
-            }}
-            className="serif"
+          <div
             style={{
-              fontSize: "var(--fs-lg)",
-              fontWeight: 800,
-              padding: "4px 8px",
-              background: "var(--bg-surface)",
-              border: "1px solid var(--accent)",
-              borderRadius: "var(--r-sm)",
-              flex: 1,
-              maxWidth: 360,
-              outline: "none",
-              color: "var(--ink-1)",
+              width: 24,
+              height: 30,
+              borderRadius: 3,
+              background: coverGradient(novel.cover),
+              flexShrink: 0,
             }}
           />
-        ) : (
-          <h1
-            className="serif"
-            style={{
-              fontSize: "var(--fs-lg)",
-              fontWeight: 800,
-              flex: 1,
-              cursor: "text",
-              padding: "4px 8px",
-              borderRadius: "var(--r-sm)",
-            }}
-            onClick={() => setEditing(true)}
-            title="제목 수정"
-            data-tooltip="클릭해서 수정"
-          >
-            {novel.title}
-          </h1>
-        )}
 
-        <IconButton
-          icon="upload"
-          label="전체 ZIP 업로드 (자동 매핑·씬 분리)"
-          onClick={() => fileInputRef.current?.click()}
-          align="end"
-          pos="bottom"
-        />
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".zip,application/zip"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            e.target.value = "";
-            if (f) onImport(f);
-          }}
-          style={{ display: "none" }}
-        />
-        <IconButton
-          icon="download"
-          label="전체 .md ZIP 다운로드"
-          onClick={onExport}
-          align="end"
-          pos="bottom"
-        />
-        <div style={{ position: "relative" }}>
+          {editing ? (
+            <input
+              autoFocus
+              value={val}
+              onChange={(e) => setVal(e.target.value)}
+              onBlur={commitTitle}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitTitle();
+                if (e.key === "Escape") {
+                  setVal(novel.title);
+                  setEditing(false);
+                }
+              }}
+              className="serif"
+              style={{
+                fontSize: "var(--fs-lg)",
+                fontWeight: 800,
+                padding: "4px 8px",
+                background: "var(--bg-surface)",
+                border: "1px solid var(--accent)",
+                borderRadius: "var(--r-sm)",
+                flex: 1,
+                maxWidth: 360,
+                outline: "none",
+                color: "var(--ink-1)",
+              }}
+            />
+          ) : (
+            <h1
+              className="serif"
+              style={{
+                fontSize: "var(--fs-lg)",
+                fontWeight: 800,
+                flex: 1,
+                cursor: "text",
+                padding: "4px 8px",
+                borderRadius: "var(--r-sm)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+              onClick={() => setEditing(true)}
+              title="제목 수정"
+              data-tooltip="클릭해서 수정"
+            >
+              {novel.title}
+            </h1>
+          )}
+        </div>
+
+        <div className="header-actions-row" style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <IconButton
-            icon="settings"
-            label="설정"
-            onClick={() => setSettingsOpen((o) => !o)}
+            icon="upload"
+            label="전체 ZIP 업로드 (자동 매핑·씬 분리)"
+            onClick={() => fileInputRef.current?.click()}
             align="end"
             pos="bottom"
           />
-          {settingsOpen && (
-            <SettingsPopover onClose={() => setSettingsOpen(false)} />
-          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".zip,application/zip"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) onImport(f);
+            }}
+            style={{ display: "none" }}
+          />
+          <IconButton
+            icon="download"
+            label="전체 .md ZIP 다운로드"
+            onClick={onExport}
+            align="end"
+            pos="bottom"
+          />
+          <div style={{ position: "relative" }}>
+            <IconButton
+              icon="settings"
+              label="설정"
+              onClick={() => setSettingsOpen((o) => !o)}
+              align="end"
+              pos="bottom"
+            />
+            {settingsOpen && (
+              <SettingsPopover onClose={() => setSettingsOpen(false)} />
+            )}
+          </div>
+          <IconButton icon="logout" label="로그아웃" onClick={onLogout} align="end" pos="bottom" />
         </div>
-        <IconButton icon="logout" label="로그아웃" onClick={onLogout} align="end" pos="bottom" />
       </div>
 
       <div style={{ maxWidth: 1280, margin: "0 auto", padding: "0 24px" }}>

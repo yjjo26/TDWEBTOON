@@ -76,9 +76,10 @@ export default function SettingsTab() {
   return (
     <div
       className="page-in"
-      style={{ maxWidth: 1120, margin: "0 auto", padding: "32px 24px" }}
+      style={{ maxWidth: 1120, margin: "0 auto", padding: "24px 16px" }}
     >
       <div
+        className="tab-header-toolbar"
         style={{
           display: "flex",
           alignItems: "baseline",
